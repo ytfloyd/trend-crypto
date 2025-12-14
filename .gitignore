@@ -1,0 +1,15 @@
+# Environments
+venv_trend_crypto/
+.venv/
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Data & artifacts
+data/
+artifacts/
+
+# OS
+.DS_Store
