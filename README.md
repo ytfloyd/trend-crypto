@@ -32,3 +32,6 @@ pytest
 - Strategies decide at bar close; orders fill at the next bar open with slippage and fees.
 - Strict validation can be enabled to verify temporal integrity and fill timing.
 
+# Days with missing hours (BTCUSD):
+#(datetime.date(2025, 10, 25), 19, datetime.datetime(2025, 10, 25, 0, 0), datetime.datetime(2025, 10, 25, 23, 0))
+#(datetime.date(2025, 11, 30), 16, datetime.datetime(2025, 11, 30, 0, 0), datetime.datetime(2025, 11, 30, 15, 0))
