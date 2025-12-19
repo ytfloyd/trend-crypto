@@ -53,7 +53,8 @@ def find_earliest_available_hour(
     rate_limiter: RateLimiter,
 ) -> datetime:
     anchor = datetime(2012, 1, 1, tzinfo=timezone.utc)
-    step = timedelta(days=90)
+    coarse_step = timedelta(days=90)
+    probe_window = timedelta(seconds=WINDOW_SECONDS)
 
     t = anchor
     found = False
@@ -61,69 +62,117 @@ def find_earliest_available_hour(
     hi = end_dt
 
     while t < end_dt:
-        probe_end = min(t + step, end_dt)
-        df = fetch_candles_chunk(
-            session,
-            product_id,
-            t,
-            probe_end,
-            granularity,
-            timeout=timeout,
-            max_retries=max_retries,
-            rate_limiter=rate_limiter,
-        )
+        probe_start = t
+        probe_end = min(probe_start + probe_window, end_dt)
+        try:
+            df = fetch_candles_chunk(
+                session,
+                product_id,
+                probe_start,
+                probe_end,
+                granularity,
+                timeout=timeout,
+                max_retries=max_retries,
+                rate_limiter=rate_limiter,
+            )
+        except requests.HTTPError as e:
+            resp = getattr(e, "response", None)
+            if resp is not None and resp.status_code == 400:
+                df = pl.DataFrame(
+                    schema={
+                        "time": pl.Datetime(time_zone="UTC"),
+                        "low": pl.Float64,
+                        "high": pl.Float64,
+                        "open": pl.Float64,
+                        "close": pl.Float64,
+                        "volume": pl.Float64,
+                    }
+                )
+            else:
+                raise
         empty = df.is_empty()
         logging.info(
             "Earliest scan probe: %s -> %s (empty=%s)",
-            t.isoformat(),
+            probe_start.isoformat(),
             probe_end.isoformat(),
             empty,
         )
         if empty:
-            t = probe_end
+            t = probe_start + coarse_step
             lo = t
             continue
         # Found non-empty region
         found = True
-        hi = probe_end
-        lo = max(anchor, t - step)
+        hi = probe_start
+        lo = max(anchor, probe_start - coarse_step)
         break
 
     if not found:
         raise RuntimeError("No candles found for BTC-USD in the specified range.")
 
-    step_probe = timedelta(days=7)
     while lo < hi:
         mid = floor_to_hour(lo + (hi - lo) / 2)
         if mid >= hi:
             break
-        mid_end = min(mid + step_probe, end_dt)
-        df = fetch_candles_chunk(
-            session,
-            product_id,
-            mid,
-            mid_end,
-            granularity,
-            timeout=timeout,
-            max_retries=max_retries,
-            rate_limiter=rate_limiter,
-        )
+        mid_end = min(mid + probe_window, end_dt)
+        try:
+            df = fetch_candles_chunk(
+                session,
+                product_id,
+                mid,
+                mid_end,
+                granularity,
+                timeout=timeout,
+                max_retries=max_retries,
+                rate_limiter=rate_limiter,
+            )
+        except requests.HTTPError as e:
+            resp = getattr(e, "response", None)
+            if resp is not None and resp.status_code == 400:
+                df = pl.DataFrame(
+                    schema={
+                        "time": pl.Datetime(time_zone="UTC"),
+                        "low": pl.Float64,
+                        "high": pl.Float64,
+                        "open": pl.Float64,
+                        "close": pl.Float64,
+                        "volume": pl.Float64,
+                    }
+                )
+            else:
+                raise
         if df.is_empty():
             lo = mid + timedelta(hours=1)
         else:
             hi = mid
 
-    tight_end = min(hi + timedelta(hours=300), end_dt)
-    df_final = fetch_candles_chunk(
-        session,
-        product_id,
-        hi,
-        tight_end,
-        granularity,
-        timeout=timeout,
-        max_retries=max_retries,
-        rate_limiter=rate_limiter,
-    )
+    tight_end = min(hi + probe_window, end_dt)
+    try:
+        df_final = fetch_candles_chunk(
+            session,
+            product_id,
+            hi,
+            tight_end,
+            granularity,
+            timeout=timeout,
+            max_retries=max_retries,
+            rate_limiter=rate_limiter,
+        )
+    except requests.HTTPError as e:
+        resp = getattr(e, "response", None)
+        if resp is not None and resp.status_code == 400:
+            df_final = pl.DataFrame(
+                schema={
+                    "time": pl.Datetime(time_zone="UTC"),
+                    "low": pl.Float64,
+                    "high": pl.Float64,
+                    "open": pl.Float64,
+                    "close": pl.Float64,
+                    "volume": pl.Float64,
+                }
+            )
+        else:
+            raise
     if df_final.is_empty():
         raise RuntimeError("Failed to locate earliest candle despite non-empty probe.")
     earliest = floor_to_hour(df_final["time"].min())
@@ -347,6 +396,9 @@ def main() -> int:
         datefmt="%Y-%m-%dT%H:%M:%S",
     )
 
+    session = requests.Session()
+    rate_limiter = RateLimiter(args.max_rps)
+
     if args.symbol != PRODUCT_ID:
         logging.error("Only BTC-USD is supported for now.")
         return 1
@@ -389,15 +441,11 @@ def main() -> int:
     start_dt = floor_to_hour(start_dt)
     end_dt = floor_to_hour(end_dt)
 
-    session = requests.Session()
-    rate_limiter = RateLimiter(args.max_rps)
-
     total_rows = 0
     earliest_ts: Optional[datetime] = None
     latest_ts: Optional[datetime] = None
 
     window_delta = timedelta(seconds=WINDOW_SECONDS)
-    overlap_delta = timedelta(seconds=0)
     w_start = start_dt
     while True:
         w_end = min(w_start + window_delta, end_dt)

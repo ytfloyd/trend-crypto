@@ -18,6 +18,18 @@ pip install -e .
 python scripts/run_backtest.py --config configs/runs/btc_hourly_ma_vol_target.yaml
 ```
 
+Run buy & hold baseline:
+
+```bash
+python scripts/run_backtest.py --config configs/runs/btc_hourly_buy_and_hold.yaml
+```
+
+Compare two runs:
+
+```bash
+python scripts/compare_runs.py --run_a <strategy_run_dir> --run_b <bh_run_dir> --out artifacts/compare/btc_hourly
+```
+
 Artifacts are written under `artifacts/runs/<run_id>/`.
 
 ## Tests

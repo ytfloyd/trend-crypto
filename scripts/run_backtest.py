@@ -15,6 +15,7 @@ from data.portal import DataPortal
 from execution.sim import ExecutionSim
 from risk.risk_manager import RiskManager
 from strategy.ma_cross_vol_hysteresis import MACrossVolHysteresis
+from strategy.buy_and_hold import BuyAndHoldStrategy
 
 
 def parse_args() -> argparse.Namespace:
@@ -32,7 +33,10 @@ def main() -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
 
     data_portal = DataPortal(cfg.data)
-    strategy = MACrossVolHysteresis(cfg.strategy)
+    if cfg.strategy.mode == "buy_and_hold":
+        strategy = BuyAndHoldStrategy(cfg.strategy)
+    else:
+        strategy = MACrossVolHysteresis(cfg.strategy)
     risk_manager = RiskManager(cfg.risk)
     exec_sim = ExecutionSim(
         fee_bps=cfg.execution.fee_bps,

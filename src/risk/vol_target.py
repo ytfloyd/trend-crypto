@@ -23,6 +23,8 @@ class VolTargeting:
     cfg: RiskConfig
 
     def scale(self, base_weight: float, history: pl.DataFrame) -> float:
+        if self.cfg.target_vol_annual is None:
+            return min(base_weight, self.cfg.max_weight)
         sigma = _sigma_hourly(history, self.cfg.vol_window)
         target_sigma_hourly = self.cfg.target_vol_annual / math.sqrt(8760)
         if sigma is None or sigma <= self.cfg.min_vol_floor:

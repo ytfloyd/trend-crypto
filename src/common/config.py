@@ -29,15 +29,20 @@ class EngineConfig(BaseModel):
 
 
 class StrategyConfig(BaseModel):
-    fast: int
-    slow: int
-    vol_window: int
-    k: float
-    min_band: float
+    mode: Optional[str] = None
+    fast: Optional[int] = None
+    slow: Optional[int] = None
+    vol_window: Optional[int] = None
+    k: Optional[float] = None
+    min_band: Optional[float] = None
     weight_on: float = 1.0
 
     @model_validator(mode="after")
     def check_windows(self) -> "StrategyConfig":
+        if self.mode == "buy_and_hold":
+            return self
+        if self.fast is None or self.slow is None or self.vol_window is None or self.k is None or self.min_band is None:
+            raise ValueError("MA strategy requires fast, slow, vol_window, k, min_band")
         if self.fast <= 0 or self.slow <= 0:
             raise ValueError("fast and slow windows must be positive")
         if self.fast >= self.slow:
@@ -47,7 +52,7 @@ class StrategyConfig(BaseModel):
 
 class RiskConfig(BaseModel):
     vol_window: int
-    target_vol_annual: float
+    target_vol_annual: Optional[float]
     max_weight: float = 1.0
     min_vol_floor: float = 1e-8
 

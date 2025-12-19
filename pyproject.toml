@@ -13,6 +13,7 @@ dependencies = [
   "duckdb>=1.1.0",
   "pydantic>=2.7.0",
   "pyyaml>=6.0",
+  "matplotlib>=3.8.0",
 ]
 
 [project.optional-dependencies]
