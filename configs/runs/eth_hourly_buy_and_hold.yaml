@@ -1,0 +1,33 @@
+run_name: "eth_hourly_buy_and_hold"
+
+data:
+  db_path: "/Users/russellfloyd/Dropbox/NRT/nrt_dev/data/market.duckdb"
+  table: "hourly_bars"
+  symbol: "ETH-USD"
+  start: "2016-05-17T17:00:00Z"
+  end: "2025-11-30T15:00:00Z"
+  timeframe: "1h"
+
+engine:
+  strict_validation: true
+  lookback: 1
+  initial_cash: 100000.0
+
+strategy:
+  mode: "buy_and_hold"
+  weight_on: 1.0
+
+risk:
+  vol_window: 48
+  target_vol_annual: null
+  max_weight: 1.0
+
+execution:
+  fee_bps: 2.5
+  slippage_bps: 1.0
+  min_trade_notional: 0.0
+  weight_deadband: 0.0
+  min_rebalance_notional: 0.0
+  min_rebalance_notional_frac: 0.0
+  cooldown_bars: 0
+  cooldown_override: 0.0

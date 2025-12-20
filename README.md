@@ -30,6 +30,24 @@ Compare two runs:
 python scripts/compare_runs.py --run_a <strategy_run_dir> --run_b <bh_run_dir> --out artifacts/compare/btc_hourly
 ```
 
+Equal-risk BTC+ETH portfolio from existing runs:
+
+```bash
+python scripts/build_equal_risk_portfolio.py \
+  --run_btc artifacts/runs/<btc_run_dir> \
+  --run_eth artifacts/runs/<eth_run_dir> \
+  --out artifacts/compare/portfolio_btc_eth_equal_risk
+```
+
+Diagnostics:
+
+```bash
+python scripts/diagnose_sleeve_correlation.py \
+  --run_btc artifacts/runs/<btc_run_dir> \
+  --run_eth artifacts/runs/<eth_run_dir> \
+  --crisis_quantile 0.2
+```
+
 Artifacts are written under `artifacts/runs/<run_id>/`.
 
 ## Tests

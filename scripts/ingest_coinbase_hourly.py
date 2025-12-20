@@ -377,11 +377,11 @@ def load_resume_start(conn: duckdb.DuckDBPyConnection, product_id: str, granular
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Ingest Coinbase hourly candles into DuckDB and Parquet.")
-    parser.add_argument("--symbol", default=PRODUCT_ID, help="Product ID (only BTC-USD supported)")
+    parser.add_argument("--symbol", default=PRODUCT_ID, help="Product ID (e.g., BTC-USD, ETH-USD)")
     parser.add_argument("--start", help="ISO8601 start (UTC). Required unless --resume and data exists.")
     parser.add_argument("--end", help="ISO8601 end (UTC). Defaults to now.")
     parser.add_argument("--db", default="data/market.duckdb")
-    parser.add_argument("--parquet", default="data/curated/hourly/BTC-USD.parquet")
+    parser.add_argument("--parquet", default=None)
     parser.add_argument("--granularity", type=int, default=HOURLY_GRANULARITY)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--strict", action="store_true")
@@ -399,12 +399,9 @@ def main() -> int:
     session = requests.Session()
     rate_limiter = RateLimiter(args.max_rps)
 
-    if args.symbol != PRODUCT_ID:
-        logging.error("Only BTC-USD is supported for now.")
-        return 1
-
     end_dt = parse_dt(args.end) if args.end else datetime.now(timezone.utc)
     symbol = args.symbol
+    parquet_path = args.parquet or f"data/curated/hourly/{symbol}.parquet"
 
     conn = duckdb.connect(args.db)
     ensure_candles_table_no_pk(conn)
@@ -412,7 +409,7 @@ def main() -> int:
 
     start_dt: Optional[datetime] = None
     if args.resume:
-        resume_start = load_resume_start(conn, PRODUCT_ID, args.granularity)
+        resume_start = load_resume_start(conn, symbol, args.granularity)
         if resume_start is not None:
             start_dt = resume_start + timedelta(seconds=args.granularity)
             logging.info("Resuming from %s", start_dt.isoformat())
@@ -421,7 +418,7 @@ def main() -> int:
         if args.start and args.start.lower() == "earliest":
             start_dt = find_earliest_available_hour(
                 session,
-                PRODUCT_ID,
+                symbol,
                 args.granularity,
                 end_dt,
                 timeout=args.timeout,
@@ -454,7 +451,7 @@ def main() -> int:
         logging.info("Fetching %s to %s", w_start.isoformat(), w_end.isoformat())
         df_chunk = fetch_candles_chunk(
             session,
-            PRODUCT_ID,
+            symbol,
             w_start,
             w_end,
             args.granularity,
@@ -481,7 +478,7 @@ def main() -> int:
 
         df_insert = df_chunk.with_columns(
             [
-                pl.lit(PRODUCT_ID).alias("product_id"),
+                pl.lit(symbol).alias("product_id"),
                 pl.lit(args.granularity).alias("granularity"),
             ]
         )[
@@ -505,7 +502,7 @@ def main() -> int:
                   AND time >= ?
                   AND time <= ?;
                 """,
-                [PRODUCT_ID, args.granularity, tmin, tmax],
+                [symbol, args.granularity, tmin, tmax],
             )
             conn.register("tmp_candles", df_insert)
             conn.execute(
