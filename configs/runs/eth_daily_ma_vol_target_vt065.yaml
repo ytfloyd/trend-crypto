@@ -1,0 +1,38 @@
+run_name: "eth_daily_ma_vol_target_vt065"
+
+data:
+  db_path: "/Users/russellfloyd/Dropbox/NRT/nrt_dev/data/market.duckdb"
+  table: "bars_1d_clean"
+  symbol: "ETH-USD"
+  start: "2016-05-17T17:00:00Z"
+  end: "2025-11-30T15:00:00Z"
+  timeframe: "1d"
+
+engine:
+  strict_validation: true
+  lookback: 500
+  initial_cash: 100000.0
+
+strategy:
+  fast: 24
+  slow: 72
+  vol_window: 48
+  k: 2.0
+  min_band: 0.002
+  weight_on: 1.0
+
+risk:
+  vol_window: 48
+  target_vol_annual: 0.65
+  max_weight: 1.0
+
+execution:
+  fee_bps: 10.0
+  slippage_bps: 1.0
+  min_trade_notional: 10.0
+  weight_deadband: 0.01
+  min_rebalance_notional: 50.0
+  min_rebalance_notional_frac: 0.001
+  cooldown_bars: 0
+  cooldown_override: 0.05
+  execution_lag_bars: 1

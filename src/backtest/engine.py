@@ -1,17 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Optional
-
 import polars as pl
 
 from backtest.portfolio import Portfolio
-from backtest.rebalance import rebalance_to_target_weight
-from backtest.validators import validate_bars, validate_context_bounds, validate_fill_timing
+from backtest.validators import validate_bars, validate_context_bounds
 from common.config import RunConfig
 from data.portal import DataPortal
-from execution.sim import ExecutionSim
 from strategy.context import make_strategy_context
 from strategy.base import TargetWeightStrategy
 from risk.risk_manager import RiskManager
@@ -19,7 +14,7 @@ from risk.risk_manager import RiskManager
 
 @dataclass
 class PendingTarget:
-    ts_decided: datetime
+    ts_decided: int
     target_weight: float
 
 
@@ -34,74 +29,85 @@ class BacktestEngine:
         strategy: TargetWeightStrategy,
         risk_manager: RiskManager,
         data_portal: DataPortal,
-        exec_sim: ExecutionSim,
     ) -> None:
         self.cfg = cfg
         self.strategy = strategy
         self.risk_manager = risk_manager
         self.data_portal = data_portal
-        self.exec_sim = exec_sim
 
     def run(self) -> tuple[Portfolio, dict]:
         bars = self.data_portal.load_bars()
         validate_bars(bars)
 
-        portfolio = Portfolio(cash=self.cfg.engine.initial_cash)
-        pending: Optional[PendingTarget] = None
-        bars_since_last_trade: int = 0
-
         n = bars.height
         if n < 2:
             raise ValueError("Need at least two bars to simulate execution at next open.")
 
+        # compute weights at close
+        w_signal: list[float] = []
         for i in range(n):
-            bar_ts = bars[i, "ts"]
-
-            # Execute pending target at the open of current bar (decision made at prior close)
-            if pending is not None:
-                price = bars[i, "open"]
-                nav_at_open = portfolio.nav(price)
-                order = rebalance_to_target_weight(
-                    target_weight=pending.target_weight,
-                    cash=portfolio.cash,
-                    units=portfolio.position_units,
-                    price=price,
-                    nav=nav_at_open,
-                    cfg=self.cfg.execution,
-                    bars_since_last_trade=bars_since_last_trade,
-                )
-                if order:
-                    fill = self.exec_sim.fill_order(order, ts=bar_ts)
-                    portfolio.apply_fill(fill, reason="rebalance")
-                    bars_since_last_trade = 0
-                else:
-                    bars_since_last_trade += 1
-            else:
-                bars_since_last_trade += 1
-
-            # Mark-to-market at the close of the current bar
-            close_price = bars[i, "close"]
-            portfolio.mark_to_market(bar_ts, close_price)
-
-            # Last bar: nothing further to decide
-            if i == n - 1:
-                break
-
-            # Build strategy context using data up to and including this bar
             ctx = make_strategy_context(bars, i, self.cfg.engine.lookback)
             if self.cfg.engine.strict_validation:
                 validate_context_bounds(ctx.history, ctx.decision_ts)
-
             base_weight = self.strategy.on_bar_close(ctx)
             final_weight = self.risk_manager.apply(base_weight, ctx.history)
-            pending = PendingTarget(ts_decided=bar_ts, target_weight=final_weight)
+            w_signal.append(final_weight)
 
-        frames = portfolio.to_frames()
-        trades_df = frames["trades"]
-        if self.cfg.engine.strict_validation:
-            validate_fill_timing(trades_df, bars)
+        lag = max(1, self.cfg.execution.execution_lag_bars)
+        fee_slip_bps = (self.cfg.execution.fee_bps or 0.0) + (self.cfg.execution.slippage_bps or 0.0)
 
-        summary = _summary_stats(frames["equity"])
+        asset_close = bars["close"].to_list()
+        ts_list = bars["ts"].to_list()
+        nav_list = []
+        gross_ret_list = []
+        net_ret_list = []
+        turnover_list = []
+        cost_ret_list = []
+        w_held_list = []
+
+        nav_prev = self.cfg.engine.initial_cash
+        nav_list.append(nav_prev)
+        gross_ret_list.append(0.0)
+        net_ret_list.append(0.0)
+        turnover_list.append(0.0)
+        cost_ret_list.append(0.0)
+        w_held_list.append(0.0)
+
+        for t in range(1, n):
+            asset_ret = asset_close[t] / asset_close[t - 1] - 1
+            w_held = w_signal[t - lag] if t - lag >= 0 else 0.0
+            w_prev = w_held_list[-1]
+            turnover = abs(w_held - w_prev)
+            cost_ret = turnover * fee_slip_bps / 10000.0
+            gross_ret = w_held * asset_ret
+            net_ret = gross_ret - cost_ret
+            nav_curr = nav_prev * (1 + net_ret)
+
+            w_held_list.append(w_held)
+            turnover_list.append(turnover)
+            cost_ret_list.append(cost_ret)
+            gross_ret_list.append(gross_ret)
+            net_ret_list.append(net_ret)
+            nav_list.append(nav_curr)
+            nav_prev = nav_curr
+
+        equity_df = pl.DataFrame(
+            {
+                "ts": ts_list,
+                "nav": nav_list,
+                "gross_ret": gross_ret_list,
+                "net_ret": net_ret_list,
+                "turnover": turnover_list,
+                "cost_ret": cost_ret_list,
+                "w_held": w_held_list,
+            }
+        )
+
+        portfolio = Portfolio(cash=self.cfg.engine.initial_cash)
+        portfolio.equity_history = equity_df.to_dicts()
+        portfolio.position_history = [{"ts": ts_list[i], "position_units": w_held_list[i]} for i in range(n)]
+
+        summary = _summary_stats(equity_df)
         return portfolio, summary
 
 
@@ -114,10 +120,13 @@ def _summary_stats(equity: pl.DataFrame) -> dict:
     start_nav = nav.item(0)
     end_nav = nav.item(nav.len() - 1)
     total_return = (end_nav / start_nav) - 1 if start_nav else 0.0
+    diffs = equity.select(pl.col("ts").diff().dt.total_seconds()).to_series().drop_nulls()
+    dt_seconds = diffs.median() if diffs.len() > 0 else 0
+    periods_per_year = (365 * 24 * 3600 / dt_seconds) if dt_seconds and dt_seconds > 0 else 8760
     if returns.len() > 1:
         mean = returns.mean()
         std = returns.std(ddof=1)
-        sharpe = (mean / std) * (8760**0.5) if std and std > 0 else 0.0
+        sharpe = (mean / std) * (periods_per_year**0.5) if std and std > 0 else 0.0
     else:
         sharpe = 0.0
     running_max = nav.cum_max()

@@ -48,6 +48,33 @@ python scripts/diagnose_sleeve_correlation.py \
   --crisis_quantile 0.2
 ```
 
+Timeframe sensitivity (1h/4h/1d) with slippage sweep:
+
+```bash
+python scripts/run_timeframe_sensitivity.py \
+  --timeframes 1h,4h,1d \
+  --slippage_grid_bps 1,3,5,10,15,20 \
+  --fee_bps 10.0 \
+  --base_config_btc configs/runs/btc_hourly_ma_vol_target.yaml \
+  --base_config_eth configs/runs/eth_hourly_ma_vol_target.yaml \
+  --out_csv artifacts/compare/timeframe_sensitivity.csv
+```
+
+Look-ahead lag diagnostic:
+
+```bash
+python scripts/check_lookahead_lag.py --config configs/runs/btc_hourly_ma_vol_target.yaml --lags 1,2
+```
+
+Canonical PnL (close-to-close, lagged weights):
+
+```
+gross_ret = signal.shift(lag) * close.pct_change()
+turnover = abs(signal.shift(lag) - signal.shift(lag+1))
+cost_ret = turnover * (fee_bps + slippage_bps)/10000
+net_ret = gross_ret - cost_ret
+```
+
 Artifacts are written under `artifacts/runs/<run_id>/`.
 
 ## Tests

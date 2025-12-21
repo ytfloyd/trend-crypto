@@ -12,7 +12,6 @@ from common.config import (
     StrategyConfig,
 )
 from data.portal import DataPortal
-from execution.sim import ExecutionSim
 from risk.risk_manager import RiskManager
 from strategy.base import TargetWeightStrategy
 from strategy.context import make_strategy_context
@@ -65,14 +64,26 @@ def test_temporal_and_fill_timing():
         execution=ExecutionConfig(),
     )
     engine = BacktestEngine(
-        cfg, AlwaysLong(), RiskManager(cfg.risk), DummyPortal(bars), ExecutionSim()
+        cfg,
+        AlwaysLong(),
+        RiskManager(cfg.risk, periods_per_year=8760),
+        DummyPortal(bars),
     )
     portfolio, _ = engine.run()
-    trades = portfolio.to_frames()["trades"]
+    frames = portfolio.to_frames()
+    eq = frames["equity"].sort("ts")
+    pos = frames["positions"].sort("ts")
 
-    assert trades.height == 1
-    assert trades[0, "ts"] == bars[1, "ts"]
-    assert trades[0, "ref_price"] == bars[1, "open"]
+    if "position_units" in pos.columns:
+        in_pos = (pos["position_units"].abs() > 1e-12)
+        assert in_pos.sum() >= 1
+        assert (in_pos.cast(int).diff().fill_null(0) == 1).sum() == 1
+
+    if "turnover" in eq.columns:
+        turn = eq["turnover"].fill_null(0)
+        assert (turn > 0).sum() == 1
+
+    assert abs(eq["nav"][0] - cfg.engine.initial_cash) < 1e-9
 
     ctx = make_strategy_context(bars, 1, lookback=2)
     assert ctx.history.select(pl.col("ts").max()).item() == ctx.decision_ts

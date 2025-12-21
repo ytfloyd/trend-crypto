@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from typing import Optional
 
 import polars as pl
 
 from common.config import RiskConfig
+import math
 
 
 def _sigma_hourly(history: pl.DataFrame, window: int) -> Optional[float]:
@@ -21,14 +21,16 @@ def _sigma_hourly(history: pl.DataFrame, window: int) -> Optional[float]:
 @dataclass
 class VolTargeting:
     cfg: RiskConfig
+    periods_per_year: float
 
     def scale(self, base_weight: float, history: pl.DataFrame) -> float:
         if self.cfg.target_vol_annual is None:
             return min(base_weight, self.cfg.max_weight)
         sigma = _sigma_hourly(history, self.cfg.vol_window)
-        target_sigma_hourly = self.cfg.target_vol_annual / math.sqrt(8760)
+        target_sigma = self.cfg.target_vol_annual
         if sigma is None or sigma <= self.cfg.min_vol_floor:
             return min(base_weight, self.cfg.max_weight)
-        scaled = base_weight * (target_sigma_hourly / sigma)
+        sigma_annual = sigma * math.sqrt(self.periods_per_year)
+        scaled = base_weight * (target_sigma / sigma_annual)
         return max(0.0, min(scaled, self.cfg.max_weight))
 

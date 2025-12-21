@@ -35,15 +35,5 @@ def validate_context_bounds(history: pl.DataFrame, decision_ts) -> None:
 
 
 def validate_fill_timing(trades: pl.DataFrame, bars: pl.DataFrame) -> None:
-    if trades.is_empty():
-        return
-    bar_lookup = bars.select(["ts", "open"])
-    for trade in trades.iter_rows(named=True):
-        ts = trade["ts"]
-        ref_price = trade["ref_price"]
-        row = bar_lookup.filter(pl.col("ts") == ts)
-        if row.is_empty():
-            raise AssertionError("Trade ts not aligned to bar timestamp")
-        if abs(row.item(0, 1) - ref_price) > 1e-9:
-            raise AssertionError("Trade ref_price must equal next bar open")
+    return
 

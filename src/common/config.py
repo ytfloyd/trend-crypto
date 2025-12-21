@@ -36,6 +36,7 @@ class StrategyConfig(BaseModel):
     k: Optional[float] = None
     min_band: Optional[float] = None
     weight_on: float = 1.0
+    window_units: str = "hours"
 
     @model_validator(mode="after")
     def check_windows(self) -> "StrategyConfig":
@@ -47,6 +48,8 @@ class StrategyConfig(BaseModel):
             raise ValueError("fast and slow windows must be positive")
         if self.fast >= self.slow:
             raise ValueError("fast must be shorter than slow")
+        if self.window_units not in ("hours", "bars"):
+            raise ValueError("window_units must be 'hours' or 'bars'")
         return self
 
 
@@ -55,6 +58,13 @@ class RiskConfig(BaseModel):
     target_vol_annual: Optional[float]
     max_weight: float = 1.0
     min_vol_floor: float = 1e-8
+    window_units: str = "hours"
+
+    @model_validator(mode="after")
+    def check_window_units(self) -> "RiskConfig":
+        if self.window_units not in ("hours", "bars"):
+            raise ValueError("window_units must be 'hours' or 'bars'")
+        return self
 
 
 class ExecutionConfig(BaseModel):
@@ -66,6 +76,13 @@ class ExecutionConfig(BaseModel):
     min_rebalance_notional_frac: float = 0.0
     cooldown_bars: int = 0
     cooldown_override: float = 0.0
+    execution_lag_bars: int = 1
+
+    @model_validator(mode="after")
+    def check_lag(self) -> "ExecutionConfig":
+        if self.execution_lag_bars < 1:
+            raise ValueError("execution_lag_bars must be >= 1")
+        return self
 
 
 class RunConfig(BaseModel):

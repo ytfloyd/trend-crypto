@@ -19,7 +19,7 @@ def _history(closes: list[float]) -> pl.DataFrame:
 
 def test_vol_target_scales_down_when_vol_high():
     cfg = RiskConfig(vol_window=3, target_vol_annual=0.6, max_weight=1.0, min_vol_floor=1e-8)
-    rm = RiskManager(cfg)
+    rm = RiskManager(cfg, periods_per_year=8760)
 
     low_vol = _history([100, 100.2, 100.4, 100.5, 100.6])
     high_vol = _history([100, 110, 90, 120, 80])
