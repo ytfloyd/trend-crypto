@@ -8,14 +8,17 @@ from typing import Dict
 import matplotlib.pyplot as plt
 import polars as pl
 import numpy as np
-from math import exp, log, sqrt
 
 
 def load_equity(run_dir: Path) -> pl.DataFrame:
     path = run_dir / "equity.parquet"
     if not path.exists():
         raise FileNotFoundError(f"Missing equity.parquet in {run_dir}")
-    return pl.read_parquet(path).select(["ts", "nav"]).sort("ts")
+    cols = [c for c in ["ts", "nav", "net_ret", "gross_ret", "turnover", "cost_ret"] if c in pl.read_parquet(path).columns]
+    df = pl.read_parquet(path).select(cols).sort("ts")
+    if "net_ret" not in df.columns:
+        df = df.with_columns((pl.col("nav") / pl.col("nav").shift(1) - 1).alias("net_ret"))
+    return df
 
 
 def compute_equal_risk_portfolio(
@@ -29,27 +32,30 @@ def compute_equal_risk_portfolio(
     min_gross_leverage: float,
     port_vol_method: str,
     downside_threshold: float,
-    panic_fast_halflife_hours: float,
-    panic_vol_threshold_annual: float,
-    panic_min_bars: int,
-    corr_window_hours: int,
-    corr_threshold: float,
-    corr_leverage_mult: float,
     portfolio_fee_bps: float,
     portfolio_slippage_bps: float,
-    enable_panic_switch: int,
-    enable_corr_override: int,
-    corr_window_slow_hours: int,
+    corr_window_slow: int,
     corr_threshold_slow: float,
-    corr_window_fast_hours: int,
+    corr_window_fast: int,
     corr_threshold_fast: float,
+    corr_leverage_mult: float,
     max_allowed_drawdown: float,
     dd_vol_floor: float,
-    enable_dd_targetvol_scaling: int,
+    enable_dd_targetvol_scaling: int | bool,
+    enable_corr_override: int | bool,
+    recovery_probe_days: int,
+    recovery_probe_scalar: float,
+    stress_vol_fast_hours: int,
+    stress_vol_slow_hours: int,
+    stress_ma_trend_hours: int,
+    stress_vol_mult: float,
 ) -> pl.DataFrame:
+    enable_dd_targetvol_scaling = bool(enable_dd_targetvol_scaling)
+    enable_corr_override = bool(enable_corr_override)
+    dd_vol_floor = float(dd_vol_floor)
     joined = (
-        eq_btc.rename({"nav": "nav_btc"})
-        .join(eq_eth.rename({"nav": "nav_eth"}), on="ts", how="inner")
+        eq_btc.rename({"nav": "nav_btc", "net_ret": "net_ret_btc"})
+        .join(eq_eth.rename({"nav": "nav_eth", "net_ret": "net_ret_eth"}), on="ts", how="inner")
         .sort("ts")
     )
     if joined.height < 2:
@@ -57,8 +63,8 @@ def compute_equal_risk_portfolio(
 
     df = joined.with_columns(
         [
-            (pl.col("nav_btc") / pl.col("nav_btc").shift(1) - 1).alias("r_btc"),
-            (pl.col("nav_eth") / pl.col("nav_eth").shift(1) - 1).alias("r_eth"),
+            pl.col("net_ret_btc").alias("r_btc"),
+            pl.col("net_ret_eth").alias("r_eth"),
         ]
     ).drop_nulls(subset=["r_btc", "r_eth"])
 
@@ -147,6 +153,9 @@ def compute_equal_risk_portfolio(
     df = df.with_columns(compute_leverage_scalar(base_sigma_col).alias("leverage_scalar_base"))
 
     # Correlation calculation (slow/fast)
+    slow_win = max(2, corr_window_slow)
+    fast_win = max(2, corr_window_fast)
+
     def rolling_corr_expr(window: int) -> pl.Expr:
         mean_btc = pl.col("r_btc").rolling_mean(window_size=window, min_samples=window)
         mean_eth = pl.col("r_eth").rolling_mean(window_size=window, min_samples=window)
@@ -162,23 +171,66 @@ def compute_equal_risk_portfolio(
             .otherwise(None)
         )
 
-    corr_slow_expr = rolling_corr_expr(corr_window_slow_hours).shift(1).alias("corr_slow")
-    corr_fast_expr = rolling_corr_expr(corr_window_fast_hours).shift(1).alias("corr_fast")
+    corr_slow_expr = rolling_corr_expr(slow_win).shift(1).alias("corr_slow")
+    corr_fast_expr = rolling_corr_expr(fast_win).shift(1).alias("corr_fast")
     df = df.with_columns([corr_slow_expr, corr_fast_expr])
 
-    override_cond = (
-        ((pl.col("corr_slow").is_not_null()) & (pl.col("corr_slow") > corr_threshold_slow))
-        | ((pl.col("corr_fast").is_not_null()) & (pl.col("corr_fast") > corr_threshold_fast))
+    # Benchmark for stress detection: use btc returns if present
+    benchmark_ret = pl.col("r_btc") if "r_btc" in df.columns else pl.col("r_port_base")
+    dt_seconds = df.select(pl.col("ts").diff().dt.total_seconds()).to_series().drop_nulls().median() or 86400
+    fast_bars = max(2, round(stress_vol_fast_hours * 3600 / dt_seconds))
+    slow_bars = max(2, round(stress_vol_slow_hours * 3600 / dt_seconds))
+    trend_bars = max(2, round(stress_ma_trend_hours * 3600 / dt_seconds))
+    df = df.with_columns(
+        [
+            benchmark_ret.rolling_std(window_size=fast_bars, min_samples=fast_bars).alias("vol_fast"),
+            benchmark_ret.rolling_std(window_size=slow_bars, min_samples=slow_bars).alias("vol_slow"),
+        ]
     )
-    corr_reason_expr = pl.when(
-        (pl.col("corr_slow").is_not_null()) & (pl.col("corr_slow") > corr_threshold_slow)
-    ).then(pl.lit("slow")).otherwise(None)
-    corr_reason_expr = pl.when(
-        (pl.col("corr_fast").is_not_null()) & (pl.col("corr_fast") > corr_threshold_fast)
-    ).then(
-        pl.when(corr_reason_expr.is_not_null()).then(pl.lit("both")).otherwise(pl.lit("fast"))
-    ).otherwise(corr_reason_expr)
-    corr_reason_expr = corr_reason_expr.alias("corr_override_reason")
+    df = df.with_columns(
+        [
+            (pl.col("vol_fast") > stress_vol_mult * pl.col("vol_slow")).alias("vol_spike"),
+        ]
+    )
+    df = df.with_columns(
+        [
+            (1 + benchmark_ret).cum_prod().alias("bench_price"),
+        ]
+    )
+    df = df.with_columns(
+        [
+            pl.col("bench_price").rolling_mean(window_size=trend_bars, min_samples=trend_bars).alias("ma_trend"),
+        ]
+    )
+    df = df.with_columns(
+        [
+            (pl.col("bench_price") < pl.col("ma_trend")).alias("trend_break"),
+        ]
+    )
+    df = df.with_columns(
+        [
+            (
+                ((pl.col("corr_slow") > corr_threshold_slow) | (pl.col("corr_fast") > corr_threshold_fast))
+            ).alias("high_corr")
+        ]
+    )
+    df = df.with_columns(
+        [
+            (pl.col("vol_spike") | pl.col("trend_break")).alias("stress"),
+        ]
+    )
+
+    override_cond = pl.col("high_corr") & pl.col("stress")
+    corr_reason_expr = (
+        pl.when(override_cond & pl.col("vol_spike") & pl.col("trend_break"))
+        .then(pl.lit("both"))
+        .when(override_cond & pl.col("vol_spike"))
+        .then(pl.lit("vol_spike"))
+        .when(override_cond & pl.col("trend_break"))
+        .then(pl.lit("trend_break"))
+        .otherwise(pl.lit(""))
+        .alias("corr_override_reason")
+    )
 
     if enable_corr_override:
         leverage_scalar_corr_base = pl.when(override_cond).then(
@@ -197,43 +249,8 @@ def compute_equal_risk_portfolio(
         ]
     )
 
-    # Panic kill-switch using EWMA fast vol
-    alpha = 1 - exp(log(0.5) / max(panic_fast_halflife_hours, 1e-6))
-    r_base_np = df["r_port_base"].to_list()
-    var_list = []
-    var_prev = 0.0
-    for i, r in enumerate(r_base_np):
-        if i == 0:
-            var_prev = r * r
-        else:
-            var_prev = (1 - alpha) * var_prev + alpha * (r_base_np[i - 1] ** 2)
-        var_list.append(var_prev)
-    fast_vol_ann = [sqrt(v) * sqrt(8760) if v >= 0 else None for v in var_list]
-    df = df.with_columns(
-        [
-            pl.Series("fast_vol_ann", fast_vol_ann),
-        ]
-    )
-    if enable_panic_switch:
-        df = df.with_columns(
-            (
-                pl.when(
-                    (pl.col("fast_vol_ann") > panic_vol_threshold_annual)
-                    & (pl.arange(0, pl.len()) >= panic_min_bars)
-                )
-                .then(pl.lit(0.0))
-                .otherwise(pl.col("leverage_scalar_corr_base"))
-            ).alias("leverage_scalar_panic_base")
-        )
-        df = df.with_columns(
-            (
-                (pl.col("fast_vol_ann") > panic_vol_threshold_annual)
-                & (pl.arange(0, pl.len()) >= panic_min_bars)
-            ).alias("panic_triggered_base")
-        )
-    else:
-        df = df.with_columns(pl.col("leverage_scalar_corr_base").alias("leverage_scalar_panic_base"))
-        df = df.with_columns(pl.lit(False).alias("panic_triggered_base"))
+    df = df.with_columns(pl.col("leverage_scalar_corr_base").alias("leverage_scalar_panic_base"))
+    df = df.with_columns(pl.lit(False).alias("panic_triggered_base"))
 
     cost_bps_total = (portfolio_fee_bps + portfolio_slippage_bps) / 10000.0
 
@@ -280,12 +297,47 @@ def compute_equal_risk_portfolio(
             (
                 (1 - (pl.col("dd").abs() / max_allowed_drawdown))
                 .clip(lower_bound=dd_vol_floor)
-            ).alias("scale_dd")
+            ).alias("dd_scaler")
         )
     else:
-        df = df.with_columns(pl.lit(1.0).alias("scale_dd"))
+        df = df.with_columns(pl.lit(1.0).alias("dd_scaler"))
+
+    # recovery probe
     df = df.with_columns(
-        (pl.lit(target_portfolio_vol_annual) * pl.col("scale_dd")).alias("target_vol_new_annual")
+        (pl.col("dd_scaler") <= dd_vol_floor + 1e-12).alias("in_cash_probe")
+    )
+    df = df.with_columns(
+        pl.col("in_cash_probe")
+        .cast(int)
+        .cum_sum()
+        .alias("probe_counter_raw")
+    )
+    df = df.with_columns(
+        (
+            pl.when(pl.col("in_cash_probe"))
+            .then(pl.col("probe_counter_raw") - pl.col("probe_counter_raw").shift(1).fill_null(0))
+            .otherwise(0)
+        ).alias("probe_step")
+    )
+    df = df.with_columns(
+        pl.when(pl.col("in_cash_probe"))
+        .then(pl.col("probe_step").cum_sum())
+        .otherwise(0)
+        .alias("days_in_cash")
+    )
+    df = df.with_columns(
+        (
+            (pl.col("in_cash_probe")) & (pl.col("days_in_cash") >= recovery_probe_days)
+        ).alias("probe_active")
+    )
+    df = df.with_columns(
+        (
+            pl.when(pl.col("probe_active")).then(pl.lit(recovery_probe_scalar)).otherwise(pl.col("dd_scaler"))
+        ).alias("dd_scaler")
+    )
+
+    df = df.with_columns(
+        (pl.lit(target_portfolio_vol_annual) * pl.col("dd_scaler")).alias("target_vol_new_annual")
     )
     target_sigma_dynamic = pl.col("target_vol_new_annual") / (8760 ** 0.5)
     df = df.with_columns(compute_leverage_scalar(target_sigma_dynamic).alias("leverage_scalar_base_scaled"))
@@ -298,26 +350,8 @@ def compute_equal_risk_portfolio(
     else:
         leverage_scalar_corr_final = pl.col("leverage_scalar_base_scaled")
 
-    if enable_panic_switch:
-        df = df.with_columns(
-            (
-                pl.when(
-                    (pl.col("fast_vol_ann") > panic_vol_threshold_annual)
-                    & (pl.arange(0, pl.len()) >= panic_min_bars)
-                )
-                .then(pl.lit(0.0))
-                .otherwise(leverage_scalar_corr_final)
-            ).alias("leverage_scalar_final")
-        )
-        df = df.with_columns(
-            (
-                (pl.col("fast_vol_ann") > panic_vol_threshold_annual)
-                & (pl.arange(0, pl.len()) >= panic_min_bars)
-            ).alias("panic_triggered")
-        )
-    else:
-        df = df.with_columns(leverage_scalar_corr_final.alias("leverage_scalar_final"))
-        df = df.with_columns(pl.lit(False).alias("panic_triggered"))
+    df = df.with_columns(leverage_scalar_corr_final.alias("leverage_scalar_final"))
+    df = df.with_columns(pl.lit(False).alias("panic_triggered"))
 
     df = df.with_columns(
         [
@@ -352,54 +386,60 @@ def compute_equal_risk_portfolio(
     nav_list = []
     r_port_net_list = []
     cost_cash_list = []
+    cost_ret_list = []
     nav_prev = initial_nav
     for i in range(len(r_port_list)):
         cost_cash = turnover_list[i] * cost_bps_total * nav_prev
-        r_net = r_port_list[i] - (cost_cash / nav_prev if nav_prev != 0 else 0.0)
+        cost_ret = cost_cash / nav_prev if nav_prev != 0 else 0.0
+        r_net = r_port_list[i] - cost_ret
         nav_curr = nav_prev * (1 + r_net)
         nav_list.append(nav_curr)
         r_port_net_list.append(r_net)
         cost_cash_list.append(cost_cash)
+        cost_ret_list.append(cost_ret)
         nav_prev = nav_curr
 
     df = df.with_columns(
         [
             pl.Series("r_port_net", r_port_net_list),
             pl.Series("cost_cash", cost_cash_list),
+            pl.Series("cost_ret", cost_ret_list),
             pl.Series("nav", nav_list),
         ]
     )
+    df = df.with_columns(pl.col("leverage_scalar_final").alias("leverage_scalar"))
 
     df = df.select(
         [
             "ts",
-            "nav_btc",
-            "nav_eth",
-            "r_btc",
-            "r_eth",
-            "vol_btc",
-            "vol_eth",
             "w_btc",
             "w_eth",
-            "r_port_base",
-            "sigma_port",
+            "r_btc",
+            "r_eth",
             "corr_slow",
             "corr_fast",
             "corr_override_triggered",
             "corr_override_reason",
-            "fast_vol_ann",
-            "panic_triggered",
-            "leverage_scalar_final",
+            "high_corr",
+            "stress",
+            "vol_fast",
+            "vol_slow",
+            "vol_spike",
+            "ma_trend",
+            "trend_break",
+            "leverage_scalar",
             "w_btc_scaled",
             "w_eth_scaled",
             "turnover",
-            "cost_cash",
+            "cost_ret",
             "r_port",
             "r_port_net",
             "nav",
             "dd",
-            "scale_dd",
+            "dd_scaler",
             "target_vol_new_annual",
+            "probe_active",
+            "days_in_cash",
         ]
     )
     return df
@@ -411,7 +451,7 @@ def metrics(df: pl.DataFrame) -> Dict[str, float]:
     start = nav.item(0)
     end = nav.item(nav.len() - 1)
     total_return = (end / start) - 1 if start else 0.0
-    returns = df["r_port"]
+    returns = df["r_port_net"] if "r_port_net" in df.columns else df["r_port"]
     mean = returns.mean()
     std = returns.std(ddof=1)
     diffs = df.select(pl.col("ts").diff().dt.total_seconds()).to_series().drop_nulls()
@@ -431,8 +471,8 @@ def metrics(df: pl.DataFrame) -> Dict[str, float]:
         "sharpe": sharpe,
         "max_drawdown": max_dd,
         "max_drawdown_ts": max_dd_ts,
-        "scale_dd_min": df["scale_dd"].min() if "scale_dd" in df.columns else None,
-        "scale_dd_median": df["scale_dd"].median() if "scale_dd" in df.columns else None,
+        "dd_scaler_min": df["dd_scaler"].min() if "dd_scaler" in df.columns else None,
+        "dd_scaler_median": df["dd_scaler"].median() if "dd_scaler" in df.columns else None,
     }
 
 
@@ -489,7 +529,7 @@ def main() -> None:
     parser.add_argument(
         "--target_portfolio_vol_annual",
         type=float,
-        default=0.30,
+        default=0.50,
         help="Target annualized portfolio vol (set <=0 to disable)",
     )
     parser.add_argument(
@@ -554,24 +594,14 @@ def main() -> None:
         default=0.80,
         help="Correlation threshold to apply override",
     )
-    parser.add_argument(
-        "--corr_window_slow_hours",
-        type=int,
-        default=336,
-        help="Rolling correlation window (hours) for slow correlation override",
-    )
+    parser.add_argument("--corr_window_slow", type=int, default=14, help="Slow correlation window (bars)")
     parser.add_argument(
         "--corr_threshold_slow",
         type=float,
         default=0.80,
         help="Correlation threshold for slow window",
     )
-    parser.add_argument(
-        "--corr_window_fast_hours",
-        type=int,
-        default=24,
-        help="Rolling correlation window (hours) for fast correlation override",
-    )
+    parser.add_argument("--corr_window_fast", type=int, default=2, help="Fast correlation window (bars)")
     parser.add_argument(
         "--corr_threshold_fast",
         type=float,
@@ -584,6 +614,10 @@ def main() -> None:
         default=0.50,
         help="Leverage multiplier when correlation override triggers",
     )
+    parser.add_argument("--stress_vol_fast_hours", type=int, default=48, help="Vol fast window (hours)")
+    parser.add_argument("--stress_vol_slow_hours", type=int, default=480, help="Vol slow window (hours)")
+    parser.add_argument("--stress_ma_trend_hours", type=int, default=480, help="MA trend window (hours)")
+    parser.add_argument("--stress_vol_mult", type=float, default=1.5, help="Vol spike multiplier")
     parser.add_argument(
         "--enable_corr_override",
         type=int,
@@ -593,7 +627,7 @@ def main() -> None:
     parser.add_argument(
         "--max_allowed_drawdown",
         type=float,
-        default=0.25,
+        default=0.40,
         help="Drawdown level at which target vol scales down to floor",
     )
     parser.add_argument(
@@ -607,6 +641,18 @@ def main() -> None:
         type=int,
         default=1,
         help="Set to 0 to disable drawdown-based target vol scaling",
+    )
+    parser.add_argument(
+        "--recovery_probe_days",
+        type=int,
+        default=14,
+        help="Bars in cash before applying recovery probe",
+    )
+    parser.add_argument(
+        "--recovery_probe_scalar",
+        type=float,
+        default=0.10,
+        help="Minimum scaler applied during recovery probe",
     )
     parser.add_argument(
         "--portfolio_fee_bps",
@@ -640,27 +686,51 @@ def main() -> None:
         args.min_gross_leverage,
         args.port_vol_method,
         args.downside_threshold,
-        args.panic_fast_halflife_hours,
-        args.panic_vol_threshold_annual,
-        args.panic_min_bars,
-        args.corr_window_hours,
-        args.corr_threshold,
-        args.corr_leverage_mult,
         args.portfolio_fee_bps,
         args.portfolio_slippage_bps,
-        args.enable_panic_switch,
-        args.enable_corr_override,
-        args.corr_window_slow_hours,
+        args.corr_window_slow,
         args.corr_threshold_slow,
-        args.corr_window_fast_hours,
+        args.corr_window_fast,
         args.corr_threshold_fast,
+        args.corr_leverage_mult,
         args.max_allowed_drawdown,
         args.dd_vol_floor,
         args.enable_dd_targetvol_scaling,
+        args.enable_corr_override,
+        args.recovery_probe_days,
+        args.recovery_probe_scalar,
+        args.stress_vol_fast_hours,
+        args.stress_vol_slow_hours,
+        args.stress_ma_trend_hours,
+        args.stress_vol_mult,
     )
-    portfolio.write_parquet(out_dir / "portfolio_equity.parquet")
+    portfolio.write_parquet(out_dir / "equity.parquet")
 
     m = metrics(portfolio)
+
+    up_cap = down_cap = 0.0
+    if "r_btc" in portfolio.columns:
+        r_btc = portfolio["r_btc"]
+        r_port = portfolio["r_port_net"] if "r_port_net" in portfolio.columns else portfolio["r_port"]
+        up_mask = r_btc > 0
+        down_mask = r_btc < 0
+        denom_up = r_btc.filter(up_mask).sum()
+        denom_dn = r_btc.filter(down_mask).sum()
+        up_cap = (r_port.filter(up_mask).sum() / denom_up) if denom_up != 0 else 0.0
+        down_cap = (r_port.filter(down_mask).sum() / denom_dn) if denom_dn != 0 else 0.0
+
+    turn = portfolio["turnover"] if "turnover" in portfolio.columns else None
+    turn_stats = {
+        "turnover_total": float(turn.sum()) if turn is not None else 0.0,
+        "turnover_events": int((turn > 0).sum()) if turn is not None else 0,
+        "turnover_p50": float(turn.quantile(0.5, interpolation="nearest")) if turn is not None else 0.0,
+        "turnover_p90": float(turn.quantile(0.9, interpolation="nearest")) if turn is not None else 0.0,
+        "turnover_p99": float(turn.quantile(0.99, interpolation="nearest")) if turn is not None else 0.0,
+        "turnover_max": float(turn.max()) if turn is not None else 0.0,
+    }
+    edge_per_turn = (
+        float((portfolio["r_port_net"].sum() / turn.sum()) * 10000) if turn is not None and turn.sum() != 0 else 0.0
+    )
     summary = {
         "total_return": m["total_return"],
         "cagr": m["cagr"],
@@ -691,8 +761,23 @@ def main() -> None:
         "max_allowed_drawdown": args.max_allowed_drawdown,
         "dd_vol_floor": args.dd_vol_floor,
         "enable_dd_targetvol_scaling": args.enable_dd_targetvol_scaling,
-        "scale_dd_min": m.get("scale_dd_min"),
-        "scale_dd_median": m.get("scale_dd_median"),
+        "dd_scaler_min": m.get("dd_scaler_min"),
+        "dd_scaler_median": m.get("dd_scaler_median"),
+        "recovery_probe_days": args.recovery_probe_days,
+        "recovery_probe_scalar": args.recovery_probe_scalar,
+        "probe_count": int(portfolio["probe_active"].sum()) if "probe_active" in portfolio.columns else 0,
+        "high_corr_count": int(portfolio["high_corr"].sum()) if "high_corr" in portfolio.columns else 0,
+        "stress_count": int(portfolio["stress"].sum()) if "stress" in portfolio.columns else 0,
+        "share_of_time_override": float(portfolio["corr_override_triggered"].sum()) / float(len(portfolio)) if len(portfolio) > 0 else 0.0,
+        "turnover_total": turn_stats["turnover_total"],
+        "turnover_events": turn_stats["turnover_events"],
+        "turnover_p50": turn_stats["turnover_p50"],
+        "turnover_p90": turn_stats["turnover_p90"],
+        "turnover_p99": turn_stats["turnover_p99"],
+        "turnover_max": turn_stats["turnover_max"],
+        "edge_per_turnover_bps": edge_per_turn,
+        "upside_capture_vs_btc_sleeve": up_cap,
+        "downside_capture_vs_btc_sleeve": down_cap,
         "run_btc": str(Path(args.run_btc).resolve()),
         "run_eth": str(Path(args.run_eth).resolve()),
     }
@@ -704,6 +789,24 @@ def main() -> None:
     print(f"CAGR         : {m['cagr']:.4f}")
     print(f"Sharpe       : {m['sharpe']:.4f}")
     print(f"Max Drawdown : {m['max_drawdown']:.4f}")
+    if "r_btc" in portfolio.columns:
+        r_btc = portfolio["r_btc"]
+        r_port = portfolio["r_port_net"] if "r_port_net" in portfolio.columns else portfolio["r_port"]
+        up_mask = r_btc > 0
+        down_mask = r_btc < 0
+        up_cap = (r_port.filter(up_mask).sum() / r_btc.filter(up_mask).sum()) if r_btc.filter(up_mask).sum() != 0 else 0.0
+        down_cap = (r_port.filter(down_mask).sum() / r_btc.filter(down_mask).sum()) if r_btc.filter(down_mask).sum() != 0 else 0.0
+        print(f"Upside Capture vs BTC Sleeve: {up_cap:.4f} | Downside Capture vs BTC Sleeve: {down_cap:.4f}")
+    if "turnover" in portfolio.columns:
+        turn = portfolio["turnover"]
+        turn_events = int((turn > 0).sum())
+        print(
+            f"Turnover: total={turn.sum():.4f} events={turn_events} "
+            f"p50={turn.quantile(0.5, interpolation='nearest'):.6f} "
+            f"p90={turn.quantile(0.9, interpolation='nearest'):.6f} "
+            f"p99={turn.quantile(0.99, interpolation='nearest'):.6f} "
+            f"max={turn.max():.6f}"
+        )
 
     plot_equity(portfolio, out_dir)
     plot_weights(portfolio, out_dir)

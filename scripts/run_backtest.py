@@ -16,6 +16,7 @@ from data.portal import DataPortal
 from risk.risk_manager import RiskManager
 from strategy.ma_cross_vol_hysteresis import MACrossVolHysteresis
 from strategy.buy_and_hold import BuyAndHoldStrategy
+from strategy.ma_crossover_long_only import MACrossoverLongOnlyStrategy
 
 
 def parse_args() -> argparse.Namespace:
@@ -38,7 +39,8 @@ def main() -> None:
         orig_vol = cfg.strategy.vol_window
         cfg.strategy.fast = max(1, round(orig_fast / bar_hours))
         cfg.strategy.slow = max(cfg.strategy.fast + 1, round(orig_slow / bar_hours))
-        cfg.strategy.vol_window = max(2, round(orig_vol / bar_hours))
+        if orig_vol is not None:
+            cfg.strategy.vol_window = max(2, round(orig_vol / bar_hours))
     if cfg.risk.window_units == "hours":
         orig_risk_vol = cfg.risk.vol_window
         cfg.risk.vol_window = max(2, round(orig_risk_vol / bar_hours))
@@ -56,6 +58,19 @@ def main() -> None:
     data_portal = DataPortal(cfg.data)
     if cfg.strategy.mode == "buy_and_hold":
         strategy = BuyAndHoldStrategy(cfg.strategy)
+    elif cfg.strategy.mode == "ma_crossover_long_only":
+        strategy = MACrossoverLongOnlyStrategy(
+            fast=cfg.strategy.fast,
+            slow=cfg.strategy.slow,
+            weight_on=cfg.strategy.weight_on,
+            target_vol_annual=cfg.strategy.target_vol_annual,
+            vol_lookback=cfg.strategy.vol_lookback or 20,
+            max_weight=cfg.strategy.max_weight,
+            enable_adx_filter=cfg.strategy.enable_adx_filter,
+            adx_window=cfg.strategy.adx_window,
+            adx_threshold=cfg.strategy.adx_threshold,
+            adx_entry_only=cfg.strategy.adx_entry_only,
+        )
     else:
         strategy = MACrossVolHysteresis(cfg.strategy)
     risk_manager = RiskManager(cfg.risk, ppy)

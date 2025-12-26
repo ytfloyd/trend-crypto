@@ -48,6 +48,19 @@ python scripts/diagnose_sleeve_correlation.py \
   --crisis_quantile 0.2
 ```
 
+Strategy diagnostics vs benchmark:
+
+```bash
+python scripts/diagnose_strategy.py \
+  --run_strategy artifacts/runs/v12_daily_portfolio_20251223 \
+  --run_benchmark artifacts/runs/btc_daily_buy_and_hold_20251223T164253Z \
+  --out_dir artifacts/diagnostics/v12_vs_btc \
+  --name_strategy "V1.2 Daily (Net)" \
+  --name_benchmark "BTC Buy & Hold" \
+  --top_weeks 10 \
+  --target_vol_annual 0.80
+```
+
 Timeframe sensitivity (1h/4h/1d) with slippage sweep:
 
 ```bash
@@ -75,12 +88,36 @@ cost_ret = turnover * (fee_bps + slippage_bps)/10000
 net_ret = gross_ret - cost_ret
 ```
 
+Combined 50/50 BTC/ETH portfolio and tear sheet:
+
+```bash
+python scripts/build_combined_portfolio_50_50.py \
+  --run_a artifacts/runs/<btc_run_dir> \
+  --run_b artifacts/runs/<eth_run_dir> \
+  --out_dir artifacts/compare/combined_example
+
+python scripts/generate_tearsheet_pdf.py \
+  --run_btc artifacts/runs/<btc_run_dir> \
+  --run_eth artifacts/runs/<eth_run_dir> \
+  --combined_dir artifacts/compare/combined_example \
+  --out_pdf artifacts/compare/combined_example/tearsheet.pdf \
+  --benchmark_btc_bh artifacts/runs/<btc_bh_run_dir> \
+  --rf_apy 0.04 \
+  --roll_corr_days 90
+```
+
 Artifacts are written under `artifacts/runs/<run_id>/`.
 
 ## Tests
 
 ```bash
 pytest
+```
+
+Install (dev):
+
+```bash
+pip install -e ".[dev]"
 ```
 
 ## Notes

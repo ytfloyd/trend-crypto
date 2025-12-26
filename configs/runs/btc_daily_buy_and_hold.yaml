@@ -1,0 +1,28 @@
+run_name: "btc_daily_buy_and_hold"
+
+data:
+  db_path: "/Users/russellfloyd/Dropbox/NRT/nrt_dev/data/market.duckdb"
+  table: "bars_1d_clean"
+  symbol: "BTC-USD"
+  start: "2015-07-20T14:00:00Z"
+  end: "2025-11-30T15:00:00Z"
+  timeframe: "1d"
+
+engine:
+  strict_validation: true
+  lookback: 50
+  initial_cash: 100000.0
+
+strategy:
+  mode: "buy_and_hold"
+
+risk:
+  target_vol_annual: null
+  max_weight: 1.0
+  vol_window: 20
+  window_units: "bars"
+
+execution:
+  fee_bps: 0.0
+  slippage_bps: 0.0
+  execution_lag_bars: 1

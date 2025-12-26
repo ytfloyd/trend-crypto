@@ -44,14 +44,18 @@ def run_backtest(cfg_path: Path) -> Dict[str, float]:
     run_dir = Path("artifacts") / "runs" / run_id
     summary_path = run_dir / "summary.json"
     summary = json.loads(summary_path.read_text())
-    trades_path = run_dir / "trades.parquet"
-    trades = pl.read_parquet(trades_path).height if trades_path.exists() else 0
+    equity_path = run_dir / "equity.parquet"
+    turnover_events = 0
+    if equity_path.exists():
+        eq = pl.read_parquet(equity_path)
+        if "turnover" in eq.columns:
+            turnover_events = (eq["turnover"].fill_null(0) > 0).sum()
     return {
         "run_id": run_id,
         "total_return": summary.get("total_return"),
         "sharpe": summary.get("sharpe"),
         "max_drawdown": summary.get("max_drawdown"),
-        "trades": trades,
+        "turnover_events": turnover_events,
     }
 
 
@@ -74,10 +78,10 @@ def main() -> None:
         metrics["lag"] = lag
         results.append(metrics)
 
-    print(f"{'Lag':<6}{'TotalRet':>12}{'Sharpe':>12}{'MaxDD':>12}{'Trades':>8}")
+    print(f"{'Lag':<6}{'TotalRet':>12}{'Sharpe':>12}{'MaxDD':>12}{'TurnEvts':>10}")
     for r in results:
         print(
-            f"{r['lag']:<6}{r['total_return']:>12.4f}{r['sharpe']:>12.4f}{r['max_drawdown']:>12.4f}{r['trades']:>8}"
+            f"{r['lag']:<6}{r['total_return']:>12.4f}{r['sharpe']:>12.4f}{r['max_drawdown']:>12.4f}{r['turnover_events']:>10}"
         )
 
     if len(results) >= 2:

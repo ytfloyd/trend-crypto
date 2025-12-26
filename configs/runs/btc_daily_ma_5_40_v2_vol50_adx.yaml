@@ -1,10 +1,10 @@
-run_name: "eth_daily_ma_vol_target_vt065"
+run_name: "btc_daily_ma_5_40_v2_vol50_adx"
 
 data:
   db_path: "/Users/russellfloyd/Dropbox/NRT/nrt_dev/data/market.duckdb"
   table: "bars_1d_clean"
-  symbol: "ETH-USD"
-  start: "2016-05-17T17:00:00Z"
+  symbol: "BTC-USD"
+  start: "2015-07-20T14:00:00Z"
   end: "2025-11-30T15:00:00Z"
   timeframe: "1d"
 
@@ -14,23 +14,27 @@ engine:
   initial_cash: 100000.0
 
 strategy:
-  fast: 10
-  slow: 30
-  vol_window: 20
-  k: 2.0
-  min_band: 0.002
-  weight_on: 1.0
+  mode: "ma_crossover_long_only"
   window_units: "bars"
+  fast: 5
+  slow: 40
+  weight_on: 1.0
+  target_vol_annual: 0.50
+  vol_lookback: 20
+  max_weight: 1.0
+  enable_adx_filter: true
+  adx_window: 14
+  adx_threshold: 20.0
 
 risk:
-  vol_window: 20
-  window_units: "bars"
-  target_vol_annual: 0.65
+  vol_window: 1
+  target_vol_annual: null
   max_weight: 1.0
+  window_units: "bars"
 
 execution:
-  fee_bps: 10.0
-  slippage_bps: 1.0
+  fee_bps: 0.0
+  slippage_bps: 0.0
   min_trade_notional: 10.0
   weight_deadband: 0.01
   min_rebalance_notional: 50.0
@@ -38,3 +42,4 @@ execution:
   cooldown_bars: 0
   cooldown_override: 0.05
   execution_lag_bars: 1
+

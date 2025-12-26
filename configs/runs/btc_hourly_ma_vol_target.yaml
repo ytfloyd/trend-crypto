@@ -1,7 +1,7 @@
 run_name: "btc_hourly_ma_vol_target"
 data:
   db_path: "/Users/russellfloyd/Dropbox/NRT/nrt_dev/data/market.duckdb"
-  table: "hourly_bars"
+  table: "hourly_bars_clean"
   symbol: "BTC-USD"
   start: "2015-07-20T14:00:00Z"
   end:   "2025-11-30T15:00:00Z"

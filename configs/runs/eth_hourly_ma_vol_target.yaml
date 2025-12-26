@@ -2,7 +2,7 @@ run_name: "eth_hourly_ma_vol_target"
 
 data:
   db_path: "/Users/russellfloyd/Dropbox/NRT/nrt_dev/data/market.duckdb"
-  table: "hourly_bars"
+  table: "hourly_bars_clean"
   symbol: "ETH-USD"
   start: "2016-05-17T17:00:00Z"
   end: "2025-11-30T15:00:00Z"

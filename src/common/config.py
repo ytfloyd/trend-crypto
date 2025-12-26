@@ -37,10 +37,29 @@ class StrategyConfig(BaseModel):
     min_band: Optional[float] = None
     weight_on: float = 1.0
     window_units: str = "hours"
+    target_vol_annual: Optional[float] = None
+    vol_lookback: Optional[int] = None
+    max_weight: float = 1.0
+    adx_window: int = 14
+    adx_threshold: float = 20.0
+    enable_adx_filter: bool = True
+    adx_entry_only: bool = False
 
     @model_validator(mode="after")
     def check_windows(self) -> "StrategyConfig":
         if self.mode == "buy_and_hold":
+            return self
+        if self.mode == "ma_crossover_long_only":
+            if self.fast is None or self.slow is None:
+                raise ValueError("MA crossover requires fast and slow")
+            if self.fast <= 0 or self.slow <= 0:
+                raise ValueError("fast and slow windows must be positive")
+            if self.fast >= self.slow:
+                raise ValueError("fast must be shorter than slow")
+            if self.window_units not in ("hours", "bars"):
+                raise ValueError("window_units must be 'hours' or 'bars'")
+            if self.vol_lookback is None:
+                self.vol_lookback = 20
             return self
         if self.fast is None or self.slow is None or self.vol_window is None or self.k is None or self.min_band is None:
             raise ValueError("MA strategy requires fast, slow, vol_window, k, min_band")
@@ -77,6 +96,12 @@ class ExecutionConfig(BaseModel):
     cooldown_bars: int = 0
     cooldown_override: float = 0.0
     execution_lag_bars: int = 1
+    rebalance_deadband: float = 0.05
+    max_weight_step: Optional[float] = None
+    enable_dd_throttle: bool = False
+    max_allowed_drawdown: float = 0.35
+    dd_throttle_floor: float = 0.30
+    cash_yield_annual: float = 0.0
 
     @model_validator(mode="after")
     def check_lag(self) -> "ExecutionConfig":

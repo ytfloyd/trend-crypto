@@ -14,15 +14,17 @@ engine:
   initial_cash: 100000.0
 
 strategy:
-  fast: 24
-  slow: 72
-  vol_window: 48
+  fast: 10
+  slow: 30
+  vol_window: 20
   k: 2.0
   min_band: 0.002
   weight_on: 1.0
+  window_units: "bars"
 
 risk:
-  vol_window: 48
+  vol_window: 20
+  window_units: "bars"
   target_vol_annual: 0.35
   max_weight: 1.0
 
