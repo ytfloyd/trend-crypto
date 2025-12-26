@@ -1,0 +1,17 @@
+{
+  "total_return": 69.74248323131353,
+  "cagr": 0.5627603800220282,
+  "sharpe": 1.6486064757968757,
+  "max_drawdown": -0.2704749247990864,
+  "max_drawdown_ts": "2022-12-18T00:00:00",
+  "vol_annual": 0.2978342872109519,
+  "calmar": 2.080637901794618,
+  "turnover_total": 71.70834114986668,
+  "turnover_events": 1269,
+  "turnover_p50": 0.0,
+  "turnover_p90": 0.05000000000000002,
+  "turnover_p99": 0.1,
+  "turnover_max": 0.10000000000000002,
+  "edge_per_turnover_bps": 653.2176649693797,
+  "cost_bps_paid": 0.0
+}
