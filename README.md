@@ -2,6 +2,8 @@
 
 Single-asset (BTC-USD) hourly backtesting pipeline with Polars and DuckDB. The engine enforces decision-at-close and execution-at-next-open timing, with reproducible artifacts for every run.
 
+Incubation deployment: see `deployments/v2_5_incubation/DEPLOYMENT.md`.
+
 ## Setup
 
 ```bash
@@ -87,6 +89,9 @@ turnover = abs(signal.shift(lag) - signal.shift(lag+1))
 cost_ret = turnover * (fee_bps + slippage_bps)/10000
 net_ret = gross_ret - cost_ret
 ```
+
+Incubation deployment:
+- See `deployments/v2_5_incubation/DEPLOYMENT.md` for pinned tag, configs, and operational checklist.
 
 Combined 50/50 BTC/ETH portfolio and tear sheet:
 
