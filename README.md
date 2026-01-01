@@ -81,37 +81,43 @@ Look-ahead lag diagnostic:
 python scripts/check_lookahead_lag.py --config configs/runs/btc_hourly_ma_vol_target.yaml --lags 1,2
 ```
 
-Canonical PnL (close-to-close, lagged weights):
+## Research (midcap momentum)
 
-```
-gross_ret = signal.shift(lag) * close.pct_change()
-turnover = abs(signal.shift(lag) - signal.shift(lag+1))
-cost_ret = turnover * (fee_bps + slippage_bps)/10000
-net_ret = gross_ret - cost_ret
-```
+Create/refresh deduped daily view for midcaps:
 
-Incubation deployment:
-- See `deployments/v2_5_incubation/DEPLOYMENT.md` for pinned tag, configs, and operational checklist.
+    python scripts/research/create_midcap_daily_clean_view.py
 
-Combined 50/50 BTC/ETH portfolio and tear sheet:
+Run daily MA 5/40 batch across midcaps:
 
-```bash
-python scripts/build_combined_portfolio_50_50.py \
-  --run_a artifacts/runs/<btc_run_dir> \
-  --run_b artifacts/runs/<eth_run_dir> \
-  --out_dir artifacts/compare/combined_example
+    python scripts/research/run_midcap_momentum_v0.py --config configs/research/midcap_daily_ma_5_40_v0.yaml
 
-python scripts/generate_tearsheet_pdf.py \
-  --run_btc artifacts/runs/<btc_run_dir> \
-  --run_eth artifacts/runs/<eth_run_dir> \
-  --combined_dir artifacts/compare/combined_example \
-  --out_pdf artifacts/compare/combined_example/tearsheet.pdf \
-  --benchmark_btc_bh artifacts/runs/<btc_bh_run_dir> \
-  --rf_apy 0.04 \
-  --roll_corr_days 90
-```
+Usage:
+- Create/refresh view: `python scripts/research/create_midcap_daily_clean_view.py`
+- Run batch: `python scripts/research/run_midcap_momentum_v0.py --config configs/research/midcap_daily_ma_5_40_v0.yaml [--start ... --end ...]`
 
-Artifacts are written under `artifacts/runs/<run_id>/`.
+Validation (should return 0 rows):
+
+    SELECT symbol, ts, COUNT(*) AS n
+    FROM bars_1d_midcap_clean
+    GROUP BY 1,2
+    HAVING COUNT(*) > 1;
+
+Outputs:
+- Backtest artifacts are written to `artifacts/runs/<run_id>/`
+- Per-run files include:
+  - `equity.parquet`
+  - `positions.parquet`
+  - `trades.parquet`
+  - `summary.json`
+
+Why this exists:
+- The backtest engine enforces strictly unique `ts` values per run.
+- Daily bars derived from upstream data may contain duplicate timestamps.
+- `bars_1d_midcap_clean` guarantees exactly one row per `(symbol, ts)` for research runs.
+
+Notes:
+- Research-only workflow; does not affect V2.5 deployment or production configs.
+- No tests were run (not requested).
 
 ## Tests
 
