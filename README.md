@@ -119,6 +119,154 @@ Notes:
 - Research-only workflow; does not affect V2.5 deployment or production configs.
 - No tests were run (not requested).
 
+## Research (USD universe)
+
+Create/refresh USD spot universe (ex-stablecoin bases) from bars_1d_clean:
+
+    python scripts/research/create_usd_universe_daily_clean_view.py --db ../data/market.duckdb
+
+## Research (101_alphas)
+
+Create/refresh USD universe view:
+
+    python scripts/research/create_usd_universe_daily_clean_view.py --db ../data/market.duckdb
+
+Compute alphas for USD universe:
+
+    python scripts/research/run_101_alphas_compute_v0.py \
+      --db ../data/market.duckdb \
+      --table bars_1d_usd_universe_clean \
+      --start 2017-01-01 \
+      --end 2025-01-01 \
+      --out artifacts/research/101_alphas/alphas_101_v0.parquet
+
+Run ensemble backtest:
+
+    python scripts/research/run_101_alphas_ensemble_v0.py \
+      --alphas artifacts/research/101_alphas/alphas_101_v0.parquet \
+      --db ../data/market.duckdb \
+      --price_table bars_1d_usd_universe_clean \
+      --out_dir artifacts/research/101_alphas
+
+Compute ensemble metrics:
+
+    python scripts/research/alphas101_metrics_v0.py
+
+### Phase 3: Beta / IC decay / capacity checks (101_alphas)
+
+From repo root:
+
+- Beta vs BTC (or any benchmark in `bars_1d_usd_universe_clean`):
+
+```bash
+python scripts/research/alphas101_beta_analysis_v0.py \
+  --equity artifacts/research/101_alphas/ensemble_equity_v0.csv \
+  --db ../data/coinbase_daily_121025.duckdb \
+  --price_table bars_1d_usd_universe_clean \
+  --benchmark_symbol BTC-USD \
+  --out artifacts/research/101_alphas/alphas101_beta_vs_btc_v0.csv
+```
+
+- IC decay for alpha_008 (horizons 1–5 days):
+
+```bash
+python scripts/research/alphas101_ic_decay_v0.py \
+  --alphas artifacts/research/101_alphas/alphas_101_v0.parquet \
+  --alpha_name alpha_008 \
+  --db ../data/coinbase_daily_121025.duckdb \
+  --price_table bars_1d_usd_universe_clean \
+  --max_horizon 5 \
+  --out_csv artifacts/research/101_alphas/alphas101_ic_decay_alpha008_v0.csv \
+  --out_png artifacts/research/101_alphas/alphas101_ic_decay_alpha008_v0.png
+```
+
+- TCA: 10 bps vs 20 bps cost sensitivity:
+
+```bash
+python scripts/research/alphas101_tca_v0.py \
+  --equity artifacts/research/101_alphas/ensemble_equity_v0.csv \
+  --turnover artifacts/research/101_alphas/ensemble_turnover_v0.csv \
+  --cost_bps 10 \
+  --out artifacts/research/101_alphas/metrics_101_alphas_ensemble_v0_costs_bps10.csv
+
+python scripts/research/alphas101_tca_v0.py \
+  --equity artifacts/research/101_alphas/ensemble_equity_v0.csv \
+  --turnover artifacts/research/101_alphas/ensemble_turnover_v0.csv \
+  --cost_bps 20 \
+  --out artifacts/research/101_alphas/metrics_101_alphas_ensemble_v0_costs_bps20.csv
+```
+
+### Phase 3: IC panel, regimes, gating (101_alphas)
+
+IC panel (per-alpha cross-sectional IC):
+
+```bash
+python scripts/research/alphas101_ic_panel_v0.py \
+  --alphas artifacts/research/101_alphas/alphas_101_v0.parquet \
+  --db ../data/coinbase_daily_121025.duckdb \
+  --price_table bars_1d_usd_universe_clean \
+  --horizon 1 \
+  --out_csv artifacts/research/101_alphas/alphas101_ic_panel_v0_h1.csv
+```
+
+Regime labels from C-features:
+
+```bash
+python scripts/research/alphas101_regime_labels_v0.py \
+  --alphas artifacts/research/101_alphas/alphas_101_v0.parquet \
+  --out artifacts/research/101_alphas/alphas101_regimes_v0.csv
+```
+
+Ensemble with danger-only gating:
+
+```bash
+python scripts/research/run_101_alphas_ensemble_v0.py \
+  --alphas artifacts/research/101_alphas/alphas_101_v0.parquet \
+  --db ../data/coinbase_daily_121025.duckdb \
+  --price_table bars_1d_usd_universe_clean \
+  --out_dir artifacts/research/101_alphas \
+  --target_gross 1.0 \
+  --cash_yield_annual 0.04 \
+  --regime_csv artifacts/research/101_alphas/alphas101_regimes_v0.csv \
+  --regime_mode danger_cash
+```
+
+TCA stress (10/20/30/50 bps):
+
+```bash
+for bps in 10 20 30 50; do
+  python scripts/research/alphas101_tca_v0.py \
+    --equity artifacts/research/101_alphas/ensemble_equity_v0.csv \
+    --turnover artifacts/research/101_alphas/ensemble_turnover_v0.csv \
+    --cost_bps ${bps} \
+    --out artifacts/research/101_alphas/metrics_101_alphas_ensemble_v0_costs_bps${bps}.csv
+done
+```
+
+Beta vs BTC:
+
+```bash
+python scripts/research/alphas101_beta_analysis_v0.py \
+  --equity artifacts/research/101_alphas/ensemble_equity_v0.csv \
+  --db ../data/coinbase_daily_121025.duckdb \
+  --price_table bars_1d_usd_universe_clean \
+  --benchmark_symbol BTC-USD \
+  --out artifacts/research/101_alphas/alphas101_beta_vs_btc_v0.csv
+```
+
+IC decay for alpha_008:
+
+```bash
+python scripts/research/alphas101_ic_decay_v0.py \
+  --alphas artifacts/research/101_alphas/alphas_101_v0.parquet \
+  --alpha_name alpha_008 \
+  --db ../data/coinbase_daily_121025.duckdb \
+  --price_table bars_1d_usd_universe_clean \
+  --max_horizon 5 \
+  --out_csv artifacts/research/101_alphas/alphas101_ic_decay_alpha008_v0.csv \
+  --out_png artifacts/research/101_alphas/alphas101_ic_decay_alpha008_v0.png
+```
+
 ## Tests
 
 ```bash
