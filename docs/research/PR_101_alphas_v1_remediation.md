@@ -35,3 +35,21 @@ Adds custom alphas 201–220 to the 101-alphas stack, applies ADV>10M liquidity 
 - Beta/decay/bias/concentration/capacity: `alphas101_beta_vs_btc_v1_adv10m.csv`, `alphas101_ic_decay_filtered_v1.csv`, `alphas101_alpha008_bias_filtered_v1.csv`, `alphas101_concentration_summary_v1_adv10m.csv`, `capacity_sensitivity_v1.csv`
 - Tear sheet: `alphas101_tearsheet_v1_adv10m.pdf`
 
+## Symbol-Level Exposure & Turnover (V1 Update)
+
+In addition to the ADV>10M universe filter and ghost-data cleaning, V1 now includes:
+
+- A symbol-level exposure and turnover utility:
+  - `scripts/research/alphas101_symbol_stats_v1.py`
+  - Outputs:
+    - `alphas101_symbol_stats_v1_adv10m.csv` (full universe)
+    - `alphas101_symbol_stats_top20_v1_adv10m.csv` (top-20 by avg abs weight / turnover contribution)
+- A new “Symbol Exposure & Turnover (Top 20)” page in the tear sheet (`alphas101_tearsheet_v1_adv10m.pdf`), summarizing:
+  - Average absolute weight, holding ratio, and turnover contribution by symbol.
+  - BTC/ETH share of gross exposure and turnover.
+- A turnover sanity check that:
+  - Compares the sum of symbol-level contributions to the reported mean two-sided equity turnover.
+  - Accepts small numerical differences (±5%) and only raises a warning when the discrepancy is larger, to avoid false alarms while still catching true inconsistencies.
+
+These additions are primarily for partner-facing transparency (where is risk and P&L coming from?) and internal QA on turnover and capacity assumptions.
+

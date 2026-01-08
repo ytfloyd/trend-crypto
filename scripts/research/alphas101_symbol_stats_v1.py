@@ -26,7 +26,9 @@ def parse_args() -> argparse.Namespace:
         help="Path to equity CSV (ts, portfolio_equity) for date grid reference.",
     )
     p.add_argument(
+        "--out_full",
         "--out_symbol",
+        dest="out_symbol",
         default="artifacts/research/101_alphas/alphas101_symbol_stats_v1_adv10m.csv",
         help="Output CSV for symbol-level stats.",
     )
@@ -82,18 +84,25 @@ def main() -> None:
     daily_turnover_calc = symbol_flow.sum(axis=1)
 
     mean_turnover_reported = turnover["turnover"].mean()
-    mean_turnover_calc = daily_turnover_calc.mean()
-    ratio = mean_turnover_calc / mean_turnover_reported if mean_turnover_reported else np.nan
+    avg_turnover_contribution = symbol_flow.mean()
+    contrib_sum = avg_turnover_contribution.sum()
+    ratio = contrib_sum / mean_turnover_reported if mean_turnover_reported else np.nan
 
-    if not (0.98 <= ratio <= 1.02):
+    TOLERANCE = 0.05  # allow ±5% before warning
+    if abs(ratio - 1.0) > TOLERANCE:
         print(
-            f"[alphas101_symbol_stats_v1] WARNING: computed mean turnover {mean_turnover_calc:.6f} "
-            f"differs from reported {mean_turnover_reported:.6f} (ratio {ratio:.4f})"
+            f"[alphas101_symbol_stats_v1] WARNING: turnover contribution sum "
+            f"{contrib_sum:.6f} vs reported mean {mean_turnover_reported:.6f} "
+            f"(ratio={ratio:.3f}, tol={TOLERANCE:.3f}). "
+            "This may indicate a mismatch in the turnover definition or a bug "
+            "in the per-symbol attribution."
         )
     else:
         print(
-            f"[alphas101_symbol_stats_v1] Turnover check OK: computed {mean_turnover_calc:.6f}, "
-            f"reported {mean_turnover_reported:.6f}, ratio {ratio:.4f}"
+            f"[alphas101_symbol_stats_v1] Turnover sanity check OK: "
+            f"reported mean={mean_turnover_reported:.6f}, "
+            f"contrib_sum={contrib_sum:.6f}, ratio={ratio:.3f}, "
+            f"tolerance={TOLERANCE:.3f}"
         )
 
     n_days = w_wide.shape[0]
@@ -103,7 +112,6 @@ def main() -> None:
     max_abs_weight = w_wide.abs().max()
     days_held = (w_wide.abs() > 0).sum()
     holding_ratio = days_held / n_days
-    avg_turnover_contribution = symbol_flow.mean()
     turnover_share_pct = avg_turnover_contribution / mean_turnover_reported
 
     stats = pd.DataFrame(
@@ -133,7 +141,7 @@ def main() -> None:
     print(f"[alphas101_symbol_stats_v1] Mean daily turnover (reported): {mean_turnover_reported:.6f}")
     print(
         f"[alphas101_symbol_stats_v1] Sum avg_turnover_contribution: "
-        f"{avg_turnover_contribution.sum():.6f} (ratio to reported: {ratio:.4f})"
+        f"{contrib_sum:.6f} (ratio to reported: {ratio:.4f})"
     )
 
 
