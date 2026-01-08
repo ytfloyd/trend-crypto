@@ -122,6 +122,11 @@ def main() -> None:
     metrics_df.to_csv(out_path, index=False)
     print(f"[alphas101_metrics_v0] Wrote ensemble metrics to {out_path}")
 
+    # Also write explicit V1 remediation metrics filename alongside the main output.
+    v1_path = out_path.parent / "metrics_101_ensemble_filtered_v1.csv"
+    metrics_df.to_csv(v1_path, index=False)
+    print(f"[alphas101_metrics_v0] Wrote V1 metrics to {v1_path}")
+
 
 if __name__ == "__main__":
     main()

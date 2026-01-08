@@ -109,7 +109,7 @@ def apply_turnover_cap(
 ) -> tuple["pd.Series", float]:
     """
     Enforce a max daily turnover constraint between prev_w and target_w.
-    Returns capped weights and realized turnover (0.5 * sum|delta|).
+    Returns capped weights and realized turnover (two-sided equity turnover: 0.5 * sum|delta|).
     """
     if turnover_cap is None or turnover_cap <= 0:
         all_syms = prev_w.index.union(target_w.index)
@@ -135,8 +135,16 @@ def apply_turnover_cap(
     return capped, float(realized_turnover)
 
 
-def build_weights(alpha_df: pd.DataFrame, target_gross: float) -> pd.DataFrame:
-    available = [c for c in ENSEMBLE_ALPHA_NAMES if c in alpha_df.columns]
+def build_weights(
+    alpha_df: pd.DataFrame,
+    target_gross: float,
+    alpha_cols: list[str] | None = None,
+    selection_signs: dict[str, float] | None = None,
+) -> pd.DataFrame:
+    if alpha_cols is None:
+        available = [c for c in ENSEMBLE_ALPHA_NAMES if c in alpha_df.columns]
+    else:
+        available = [c for c in alpha_cols if c in alpha_df.columns]
     if not available:
         raise ValueError("No ensemble alpha columns found to ensemble.")
 
@@ -155,6 +163,12 @@ def build_weights(alpha_df: pd.DataFrame, target_gross: float) -> pd.DataFrame:
     # 1) time-series z-score each alpha per symbol (keeps sign)
     # 2) average across alphas to get a signed signal
     alpha_panel = alpha_df.set_index(["ts", "symbol"])[available]
+
+    if selection_signs is not None:
+        for col in available:
+            sign = selection_signs.get(col, 1.0)
+            if sign < 0:
+                alpha_panel[col] = -alpha_panel[col]
 
     def _zscore_time(s: pd.Series) -> pd.Series:
         m = s.mean()
@@ -258,6 +272,14 @@ def main() -> None:
             "'danger_cash': on days with regime=='danger', set all weights to 0 and go 100% cash."
         ),
     )
+    parser.add_argument(
+        "--alpha_selection_csv",
+        help=(
+            "Optional CSV with alpha selection (alpha,sign,...) from alphas101_select_v0.py. "
+            "If provided, only these alphas are used; if 'sign' is present, each alpha "
+            "is multiplied by that sign before cross-sectional ranking."
+        ),
+    )
 
     args = parser.parse_args()
     db_path = resolve_db_path(args)
@@ -275,7 +297,27 @@ def main() -> None:
         )
 
     alpha_df = load_alphas(alpha_path)
-    weights_df = build_weights(alpha_df, args.target_gross)
+    full_alpha_cols = [c for c in alpha_df.columns if c.startswith("alpha_")]
+
+    selection_signs = None
+    alpha_cols = None
+    if args.alpha_selection_csv:
+        sel = pd.read_csv(args.alpha_selection_csv)
+        if "alpha" not in sel.columns:
+            raise ValueError("Selection CSV must have an 'alpha' column")
+        selected = set(sel["alpha"])
+        alpha_cols = [c for c in full_alpha_cols if c in selected]
+        if not alpha_cols:
+            raise ValueError("No overlap between selected alphas and available columns")
+        if "sign" in sel.columns:
+            selection_signs = dict(zip(sel["alpha"], sel["sign"]))
+        print(
+            f"[run_101_alphas_ensemble_v0] Using {len(alpha_cols)} selected alphas from {args.alpha_selection_csv}"
+        )
+    else:
+        alpha_cols = [c for c in ENSEMBLE_ALPHA_NAMES if c in full_alpha_cols]
+
+    weights_df = build_weights(alpha_df, args.target_gross, alpha_cols, selection_signs)
 
     returns_df = load_returns(db_path, args.price_table)
 

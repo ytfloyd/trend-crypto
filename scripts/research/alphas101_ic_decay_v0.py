@@ -87,7 +87,7 @@ def main() -> None:
     con = duckdb.connect(str(db_path))
     prices = con.execute(
         f"""
-        SELECT symbol, ts, close
+        SELECT symbol, ts, close, volume
         FROM {args.price_table}
         WHERE ts BETWEEN ? AND ?
         """,
@@ -95,8 +95,11 @@ def main() -> None:
     ).df()
     prices["ts"] = pd.to_datetime(prices["ts"])
     prices = prices.sort_values(["symbol", "ts"])
+    prices["prev_close"] = prices.groupby("symbol")["close"].shift(1)
+    valid = (prices["volume"] > 0) & (prices["close"] != prices["prev_close"])
+    prices = prices.loc[valid].copy()
 
-    # Compute forward returns for horizons 1..max_horizon
+    # Compute forward returns for horizons 1..max_horizon on cleaned prices
     prices = prices.set_index(["symbol", "ts"]).sort_index()
     for h in range(1, args.max_horizon + 1):
         prices[f"fwd_ret_{h}d"] = (

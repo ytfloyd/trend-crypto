@@ -39,6 +39,11 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Output CSV path for IC panel summary.",
     )
+    p.add_argument(
+        "--filtered_label",
+        default="filtered_v1",
+        help="Label to indicate filtered IC panel (e.g., ghost-data filtered).",
+    )
     return p.parse_args()
 
 
@@ -60,11 +65,11 @@ def main() -> None:
     if not alpha_cols:
         raise ValueError("No alpha_* columns found in alphas parquet.")
 
-    # Load prices and compute fwd returns
+    # Load prices and compute fwd returns (ghost-data filter)
     con = duckdb.connect(str(db_path))
     prices = con.execute(
         f"""
-        SELECT ts, symbol, close
+        SELECT ts, symbol, close, volume
         FROM {args.price_table}
         """
     ).df()
@@ -72,14 +77,17 @@ def main() -> None:
 
     prices["ts"] = pd.to_datetime(prices["ts"])
     prices = prices.sort_values(["symbol", "ts"])
-    prices["fwd_ret"] = (
-        prices.groupby("symbol")["close"]
+    prices["prev_close"] = prices.groupby("symbol")["close"].shift(1)
+    valid = (prices["volume"] > 0) & (prices["close"] != prices["prev_close"])
+    prices_clean = prices.loc[valid].copy()
+    prices_clean["fwd_ret"] = (
+        prices_clean.groupby("symbol")["close"]
         .pct_change(periods=args.horizon)
         .shift(-args.horizon)
     )
-    prices = prices.dropna(subset=["fwd_ret"])[["ts", "symbol", "fwd_ret"]]
+    prices_clean = prices_clean.dropna(subset=["fwd_ret"])[["ts", "symbol", "fwd_ret"]]
 
-    merged = df.merge(prices, on=["ts", "symbol"], how="inner")
+    merged = df.merge(prices_clean, on=["ts", "symbol"], how="inner")
     if merged.empty:
         raise ValueError("No overlap between alphas and prices after merge.")
 
@@ -115,9 +123,16 @@ def main() -> None:
         )
 
     out_df = pd.DataFrame(rows)
+    if "alpha" not in out_df.columns and "alpha_name" in out_df.columns:
+        out_df["alpha"] = out_df["alpha_name"]
+    out_df["label"] = args.filtered_label
     out_df = out_df.sort_values("tstat_ic", key=lambda s: s.abs(), ascending=False)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_df.to_csv(out_path, index=False)
+    out_cols = ["alpha", "n_days", "mean_ic", "std_ic", "tstat_ic", "label"]
+    missing = [c for c in out_cols if c not in out_df.columns]
+    if missing:
+        raise ValueError(f"IC panel is missing required columns: {missing}")
+    out_df[out_cols].to_csv(out_path, index=False)
     print(f"[alphas101_ic_panel_v0] Wrote IC panel for {len(out_df)} alphas to {out_path}")
 
 

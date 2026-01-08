@@ -267,6 +267,207 @@ python scripts/research/alphas101_ic_decay_v0.py \
   --out_png artifacts/research/101_alphas/alphas101_ic_decay_alpha008_v0.png
 ```
 
+### Phase 4: Alpha selection & orientation (101_alphas)
+
+Build IC panel (example horizon 1):
+
+```bash
+python scripts/research/alphas101_ic_panel_v0.py \
+  --alphas artifacts/research/101_alphas/alphas_101_v0.parquet \
+  --db ../data/coinbase_daily_121025.duckdb \
+  --price_table bars_1d_usd_universe_clean \
+  --horizon 1 \
+  --out_csv artifacts/research/101_alphas/alphas101_ic_panel_v0_h1.csv
+```
+
+Select and orient alphas (flip negatives unless --no_flip):
+
+```bash
+python scripts/research/alphas101_select_v0.py \
+  --ic_panel artifacts/research/101_alphas/alphas101_ic_panel_v0_h1.csv \
+  --min_tstat 3.0 \
+  --min_mean_ic 0.01 \
+  --min_n_days 400 \
+  --max_alphas 40 \
+  --out artifacts/research/101_alphas/alphas101_selected_v0.csv
+```
+
+Run ensemble with selection (and optional danger gating):
+
+```bash
+python scripts/research/run_101_alphas_ensemble_v0.py \
+  --alphas artifacts/research/101_alphas/alphas_101_v0.parquet \
+  --db ../data/coinbase_daily_121025.duckdb \
+  --price_table bars_1d_usd_universe_clean \
+  --out_dir artifacts/research/101_alphas \
+  --target_gross 1.0 \
+  --cash_yield_annual 0.04 \
+  --alpha_selection_csv artifacts/research/101_alphas/alphas101_selected_v0.csv \
+  --regime_csv artifacts/research/101_alphas/alphas101_regimes_v0.csv \
+  --regime_mode danger_cash
+```
+
+Tear sheet (multi-page PDF using existing artifacts):
+
+```bash
+python scripts/research/alphas101_tearsheet_v0.py \
+  --research_dir artifacts/research/101_alphas \
+  --out_pdf artifacts/research/101_alphas/alphas101_tearsheet_v0.pdf
+```
+
+### Phase 5: V1 remediation (ADV>10M, ghost-filtered IC, standardized turnover)
+
+Turnover definition: two-sided equity turnover = 0.5 * sum_s |w_t - w_{t-1}|.
+
+Build ADV>10M view:
+
+```bash
+python scripts/research/create_usd_universe_adv10m_view.py \
+  --db ../data/coinbase_daily_121025.duckdb \
+  --source_view bars_1d_usd_universe_clean \
+  --adv_window 20 \
+  --adv_threshold_usd 10000000 \
+  --out_view bars_1d_usd_universe_clean_adv10m
+```
+
+Compute alphas on ADV>10M:
+
+```bash
+python scripts/research/run_101_alphas_compute_v0.py \
+  --db ../data/coinbase_daily_121025.duckdb \
+  --table bars_1d_usd_universe_clean_adv10m \
+  --start 2023-01-01 \
+  --end 2025-01-01 \
+  --out artifacts/research/101_alphas/alphas_101_v1_adv10m.parquet \
+  --use_adv10m_view
+```
+
+IC panel (ghost-filtered; volume>0 & close != prev_close):
+
+```bash
+python scripts/research/alphas101_ic_panel_v0.py \
+  --alphas artifacts/research/101_alphas/alphas_101_v1_adv10m.parquet \
+  --db ../data/coinbase_daily_121025.duckdb \
+  --price_table bars_1d_usd_universe_clean_adv10m \
+  --horizon 1 \
+  --out_csv artifacts/research/101_alphas/alphas101_ic_panel_v1_adv10m_filtered.csv \
+  --filtered_label filtered_v1
+```
+
+Selection/orientation:
+
+```bash
+python scripts/research/alphas101_select_v0.py \
+  --ic_panel artifacts/research/101_alphas/alphas101_ic_panel_v1_adv10m_filtered.csv \
+  --min_tstat 3.0 \
+  --min_mean_ic 0.01 \
+  --min_n_days 400 \
+  --max_alphas 40 \
+  --out artifacts/research/101_alphas/alphas101_selected_v1_adv10m.csv
+```
+
+Regimes (unchanged logic, new parquet):
+
+```bash
+python scripts/research/alphas101_regime_labels_v0.py \
+  --alphas artifacts/research/101_alphas/alphas_101_v1_adv10m.parquet \
+  --out artifacts/research/101_alphas/alphas101_regimes_v1_adv10m.csv
+```
+
+Ensemble (selection + danger->cash gating, ADV>10M):
+
+```bash
+python scripts/research/run_101_alphas_ensemble_v0.py \
+  --alphas artifacts/research/101_alphas/alphas_101_v1_adv10m.parquet \
+  --db ../data/coinbase_daily_121025.duckdb \
+  --price_table bars_1d_usd_universe_clean_adv10m \
+  --out_dir artifacts/research/101_alphas \
+  --target_gross 1.0 \
+  --cash_yield_annual 0.04 \
+  --alpha_selection_csv artifacts/research/101_alphas/alphas101_selected_v1_adv10m.csv \
+  --regime_csv artifacts/research/101_alphas/alphas101_regimes_v1_adv10m.csv \
+  --regime_mode danger_cash
+```
+
+Metrics (writes both v0 and V1 filenames):
+
+```bash
+python scripts/research/alphas101_metrics_v0.py
+```
+
+TCA (10/20/30/40/50 bps, two-sided turnover assumed):
+
+```bash
+for bps in 10 20 30 40 50; do
+  python scripts/research/alphas101_tca_v0.py \
+    --equity artifacts/research/101_alphas/ensemble_equity_v0.csv \
+    --turnover artifacts/research/101_alphas/ensemble_turnover_v0.csv \
+    --cost_bps ${bps} \
+    --out artifacts/research/101_alphas/metrics_101_ensemble_filtered_v1_costs_bps${bps}.csv
+done
+```
+
+Beta vs BTC (ADV>10M):
+
+```bash
+python scripts/research/alphas101_beta_analysis_v0.py \
+  --equity artifacts/research/101_alphas/ensemble_equity_v0.csv \
+  --db ../data/coinbase_daily_121025.duckdb \
+  --price_table bars_1d_usd_universe_clean_adv10m \
+  --benchmark_symbol BTC-USD \
+  --out artifacts/research/101_alphas/alphas101_beta_vs_btc_v1_adv10m.csv
+```
+
+IC decay (filtered V1):
+
+```bash
+python scripts/research/alphas101_ic_decay_v0.py \
+  --alphas artifacts/research/101_alphas/alphas_101_v1_adv10m.parquet \
+  --alpha_name alpha_008 \
+  --db ../data/coinbase_daily_121025.duckdb \
+  --price_table bars_1d_usd_universe_clean_adv10m \
+  --max_horizon 5 \
+  --out_csv artifacts/research/101_alphas/alphas101_ic_decay_filtered_v1.csv \
+  --out_png artifacts/research/101_alphas/alphas101_ic_decay_filtered_v1.png
+```
+
+Alpha_008 bias check (filtered V1):
+
+```bash
+python scripts/research/alphas101_alpha008_bias_check_v0.py \
+  --alphas artifacts/research/101_alphas/alphas_101_v1_adv10m.parquet \
+  --db ../data/coinbase_daily_121025.duckdb \
+  --price_table bars_1d_usd_universe_clean_adv10m \
+  --out artifacts/research/101_alphas/alphas101_alpha008_bias_filtered_v1.csv
+```
+
+Concentration (ADV>10M ensemble):
+
+```bash
+python scripts/research/alphas101_concentration_v0.py \
+  --weights artifacts/research/101_alphas/ensemble_weights_v0.parquet \
+  --out artifacts/research/101_alphas/alphas101_concentration_summary_v1_adv10m.csv \
+  --top_n 10
+```
+
+Capacity sensitivity table:
+
+```bash
+python scripts/research/alphas101_capacity_sensitivity_v1.py \
+  --metrics_dir artifacts/research/101_alphas \
+  --base_metrics metrics_101_ensemble_filtered_v1.csv \
+  --cost_metrics_glob "metrics_101_ensemble_filtered_v1_costs_bps*.csv" \
+  --out capacity_sensitivity_v1.csv
+```
+
+Tear sheet (prefers V1 artifacts if present):
+
+```bash
+python scripts/research/alphas101_tearsheet_v0.py \
+  --research_dir artifacts/research/101_alphas \
+  --out_pdf artifacts/research/101_alphas/alphas101_tearsheet_v1_adv10m.pdf
+```
+
 ## Tests
 
 ```bash

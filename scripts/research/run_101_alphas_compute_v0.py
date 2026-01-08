@@ -101,17 +101,40 @@ def main() -> None:
         default="artifacts/research/101_alphas/alphas_101_v0.parquet",
         help="Output parquet path for alpha panel.",
     )
+    parser.add_argument(
+        "--use_adv10m_view",
+        action="store_true",
+        help="Use bars_1d_usd_universe_clean_adv10m instead of --table (requires the view to exist).",
+    )
 
     args = parser.parse_args()
     db_path = resolve_db_path(args)
-    df = load_prices(db_path, args.table, args.start, args.end)
+    table = args.table
+    if args.use_adv10m_view:
+        table = "bars_1d_usd_universe_clean_adv10m"
+        con = duckdb.connect(str(db_path))
+        exists = con.execute(
+            """
+            SELECT COUNT(*) AS n
+            FROM information_schema.tables
+            WHERE table_name = 'bars_1d_usd_universe_clean_adv10m'
+            """
+        ).fetch_df().iloc[0]["n"]
+        con.close()
+        if exists == 0:
+            raise RuntimeError(
+                "[run_101_alphas_compute_v0] bars_1d_usd_universe_clean_adv10m not found. "
+                "Run scripts/research/create_usd_universe_adv10m_view.py first."
+            )
+
+    df = load_prices(db_path, table, args.start, args.end)
 
     if df.empty:
         raise RuntimeError("No data returned for the specified range/table.")
 
     symbols = df["symbol"].nunique()
     print(
-        f"[run_101_alphas_compute_v0] Loaded {len(df)} rows for {symbols} symbols from {args.table}"
+        f"[run_101_alphas_compute_v0] Loaded {len(df)} rows for {symbols} symbols from {table}"
     )
 
     alphas = compute_all_alphas_v0(df)

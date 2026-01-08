@@ -1277,6 +1277,281 @@ def alpha_101(df: pd.DataFrame) -> pd.Series:
     return (close - open_) / ((high - low) + 0.001)
 
 
+# === Custom N-series alphas: alpha_201..alpha_220 ===
+# These are research-only extensions; they rely only on existing helpers and panel fields.
+
+
+def alpha_201(panel: pd.DataFrame) -> pd.Series:
+    """
+    alpha_201: 5-day close momentum normalized by 20-day return volatility.
+    """
+    close = panel["close"]
+    ret1 = close / delay(close, 1) - 1.0
+    mom5 = ts_sum(ret1, 5)
+    vol20 = stddev(ret1, 20)
+    signal = mom5 / (1e-6 + vol20)
+    return cs_rank(signal)
+
+
+def alpha_202(panel: pd.DataFrame) -> pd.Series:
+    """
+    alpha_202: Trend-following with shallow pullback near 20-day high.
+    """
+    close = panel["close"]
+    high = panel["high"]
+    hh20 = ts_max(high, 20)
+    trend20 = close / delay(close, 20) - 1.0
+    pullback = hh20 - close
+    signal = cs_rank(trend20) * cs_rank(-pullback)
+    return signal
+
+
+def alpha_203(panel: pd.DataFrame) -> pd.Series:
+    """
+    alpha_203: Volume-confirmed 1-day breakout.
+    """
+    close = panel["close"]
+    volume = panel["volume"]
+    ret1 = close / delay(close, 1) - 1.0
+    adv20 = ts_sum(volume, 20) / 20.0
+    vol_ratio = volume / (1e-6 + adv20)
+    signal = cs_rank(ret1) * cs_rank(vol_ratio)
+    return signal
+
+
+def alpha_204(panel: pd.DataFrame) -> pd.Series:
+    """
+    alpha_204: Trend-following VWAP reversion (buy strong names on VWAP dips).
+    """
+    close = panel["close"]
+    vwap = panel.get("vwap", close)
+    spread = (close - vwap) / (1e-6 + stddev(close, 10))
+    trend20 = close / delay(close, 20) - 1.0
+    signal = cs_rank(trend20) * cs_rank(-spread)
+    return signal
+
+
+def alpha_205(panel: pd.DataFrame) -> pd.Series:
+    """
+    alpha_205: Range-compression breakout (strong 10-day trend with tight range).
+    """
+    close = panel["close"]
+    high = panel["high"]
+    low = panel["low"]
+    range10 = ts_max(high, 10) - ts_min(low, 10)
+    mom10 = close / delay(close, 10) - 1.0
+    signal = cs_rank(mom10) * cs_rank(-range10)
+    return signal
+
+
+def alpha_206(panel: pd.DataFrame) -> pd.Series:
+    """
+    alpha_206: Path efficiency (net 10-day move vs sum of absolute 1-day moves).
+    """
+    close = panel["close"]
+    ret1 = close / delay(close, 1) - 1.0
+    abs_path10 = ts_sum(abs(ret1), 10)
+    net10 = close / delay(close, 10) - 1.0
+    eff = net10 / (1e-6 + abs_path10)
+    return cs_rank(eff)
+
+
+def alpha_207(panel: pd.DataFrame) -> pd.Series:
+    """
+    alpha_207: Gap reversion modulated by short-term volatility.
+    """
+    open_ = panel["open"]
+    close = panel["close"]
+    prev_close = delay(close, 1)
+    gap = (open_ - prev_close) / (1e-6 + prev_close)
+    ret1 = close / delay(close, 1) - 1.0
+    vol5 = stddev(ret1, 5)
+    signal = -cs_rank(gap) * cs_rank(vol5)
+    return signal
+
+
+def alpha_208(panel: pd.DataFrame) -> pd.Series:
+    """
+    alpha_208: Intraday skew; fade closes skewed away from the mid-range.
+    """
+    high = panel["high"]
+    low = panel["low"]
+    close = panel["close"]
+    rng = high - low
+    body = close - (high + low) / 2.0
+    signal = -cs_rank(body / (1e-6 + rng))
+    return signal
+
+
+def alpha_209(panel: pd.DataFrame) -> pd.Series:
+    """
+    alpha_209: Volatility-of-volume relative to average volume.
+    """
+    volume = panel["volume"]
+    vol_vol20 = stddev(volume, 20)
+    adv20 = ts_sum(volume, 20) / 20.0
+    signal = cs_rank(vol_vol20 / (1e-6 + adv20))
+    return signal
+
+
+def alpha_210(panel: pd.DataFrame) -> pd.Series:
+    """
+    alpha_210: Balance of winners vs losers over 10 days.
+    """
+    close = panel["close"]
+    ret1 = close / delay(close, 1) - 1.0
+    pos = ts_sum((ret1 > 0).astype(float), 10)
+    neg = ts_sum((ret1 < 0).astype(float), 10)
+    raw = (pos - neg) / (1.0 + pos + neg)
+    return cs_rank(raw)
+
+
+def alpha_211(panel: pd.DataFrame) -> pd.Series:
+    """
+    alpha_211: Volatility breakout (short-term vol vs long-term vol in an uptrend).
+    """
+    close = panel["close"]
+    ret1 = close / delay(close, 1) - 1.0
+    vol10 = stddev(ret1, 10)
+    vol50 = stddev(ret1, 50)
+    trend20 = close / delay(close, 20) - 1.0
+    signal = cs_rank(vol10 / (1e-6 + vol50)) * cs_rank(trend20)
+    return signal
+
+
+def alpha_212(panel: pd.DataFrame) -> pd.Series:
+    """
+    alpha_212: Short-term vs long-term momentum divergence.
+    """
+    close = panel["close"]
+    ret1 = close / delay(close, 1) - 1.0
+    mom3 = ts_sum(ret1, 3)
+    mom20 = ts_sum(ret1, 20)
+    signal = cs_rank(mom3 - mom20)
+    return signal
+
+
+def alpha_213(panel: pd.DataFrame) -> pd.Series:
+    """
+    alpha_213: Volume-weighted recent momentum (5-day decayed).
+    """
+    close = panel["close"]
+    volume = panel["volume"]
+    ret1 = close / delay(close, 1) - 1.0
+    vw_ret = decay_linear(ret1 * volume, 5)
+    signal = cs_rank(vw_ret)
+    return signal
+
+
+def alpha_214(panel: pd.DataFrame) -> pd.Series:
+    """
+    alpha_214: Down-volume exhaustion vs up-volume (contrarian).
+    """
+    close = panel["close"]
+    volume = panel["volume"]
+    ret1 = close / delay(close, 1) - 1.0
+    down_vol = decay_linear((ret1 < 0).astype(float) * volume, 5)
+    up_vol = decay_linear((ret1 > 0).astype(float) * volume, 5)
+    signal = cs_rank(-down_vol / (1e-6 + up_vol))
+    return signal
+
+
+def alpha_215(panel: pd.DataFrame) -> pd.Series:
+    """
+    alpha_215: Bollinger-band style z-score of close.
+    """
+    close = panel["close"]
+    ma20 = ts_sum(close, 20) / 20.0
+    vol20 = stddev(close, 20)
+    z = (close - ma20) / (1e-6 + vol20)
+    return cs_rank(z)
+
+
+def alpha_216(panel: pd.DataFrame) -> pd.Series:
+    """
+    alpha_216: Mean reversion of 1-day return z-score vs 20-day history.
+    """
+    close = panel["close"]
+    ret1 = close / delay(close, 1) - 1.0
+    ma20_ret = ts_sum(ret1, 20) / 20.0
+    vol20_ret = stddev(ret1, 20)
+    z = (ret1 - ma20_ret) / (1e-6 + vol20_ret)
+    return -cs_rank(z)
+
+
+def alpha_217(panel: pd.DataFrame) -> pd.Series:
+    """
+    alpha_217: Momentum acceleration (5-day minus 10-day).
+    """
+    close = panel["close"]
+    mom5 = close / delay(close, 5) - 1.0
+    mom10 = close / delay(close, 10) - 1.0
+    signal = cs_rank(mom5 - mom10)
+    return signal
+
+
+def alpha_218(panel: pd.DataFrame) -> pd.Series:
+    """
+    alpha_218: Close location in range times 5-day momentum.
+    """
+    high = panel["high"]
+    low = panel["low"]
+    close = panel["close"]
+    rng = high - low
+    loc = (close - low) / (1e-6 + rng)
+    mom5 = close / delay(close, 5) - 1.0
+    signal = cs_rank(loc * mom5)
+    return signal
+
+
+def alpha_219(panel: pd.DataFrame) -> pd.Series:
+    """
+    alpha_219: Volatility per unit volume (illiquidity tilt).
+    """
+    close = panel["close"]
+    volume = panel["volume"]
+    ret1 = close / delay(close, 1) - 1.0
+    vol20 = stddev(ret1, 20)
+    adv20 = ts_sum(volume, 20) / 20.0
+    signal = cs_rank(vol20 / (1e-6 + adv20))
+    return -signal
+
+
+def alpha_220(panel: pd.DataFrame) -> pd.Series:
+    """
+    alpha_220: Correlation of returns with volume over 20 days.
+    """
+    close = panel["close"]
+    volume = panel["volume"]
+    ret1 = close / delay(close, 1) - 1.0
+    corr20 = correlation(ret1, volume, 20)
+    return cs_rank(corr20)
+
+
+ALPHA_FUNCS_CUSTOM = {
+    "alpha_201": alpha_201,
+    "alpha_202": alpha_202,
+    "alpha_203": alpha_203,
+    "alpha_204": alpha_204,
+    "alpha_205": alpha_205,
+    "alpha_206": alpha_206,
+    "alpha_207": alpha_207,
+    "alpha_208": alpha_208,
+    "alpha_209": alpha_209,
+    "alpha_210": alpha_210,
+    "alpha_211": alpha_211,
+    "alpha_212": alpha_212,
+    "alpha_213": alpha_213,
+    "alpha_214": alpha_214,
+    "alpha_215": alpha_215,
+    "alpha_216": alpha_216,
+    "alpha_217": alpha_217,
+    "alpha_218": alpha_218,
+    "alpha_219": alpha_219,
+    "alpha_220": alpha_220,
+}
+
+
 ALPHA_FUNCS = {
     "alpha_001": alpha_001,
     "alpha_002": alpha_002,
@@ -1618,6 +1893,10 @@ def compute_all_alphas_v0(df_panel: pd.DataFrame) -> pd.DataFrame:
             alpha_outputs[name] = func(panel, ret)
         else:
             alpha_outputs[name] = func(panel)
+
+    # Custom N-series alphas
+    for name, func in ALPHA_FUNCS_CUSTOM.items():
+        alpha_outputs[name] = func(panel)
 
     # Custom C alphas
     alpha_outputs["alpha_c01"] = alpha_c01(panel)

@@ -8,7 +8,10 @@ import pandas as pd
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Apply per-turnover transaction costs to ensemble returns and recompute metrics."
+        description=(
+            "Apply per-turnover transaction costs to ensemble returns and recompute metrics. "
+            "Assumes turnover column is two-sided equity turnover: 0.5 * sum_s |w_t - w_{t-1}|."
+        )
     )
     p.add_argument(
         "--equity",

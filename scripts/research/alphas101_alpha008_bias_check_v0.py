@@ -71,15 +71,23 @@ def main() -> None:
         SELECT
             symbol,
             ts,
-            LEAD(close) OVER (PARTITION BY symbol ORDER BY ts) / close - 1.0 AS fwd_ret
+            close,
+            volume
         FROM {args.price_table}
         WHERE ts BETWEEN ? AND ?
         """,
         [start_ts, end_ts],
     ).df()
     prices["ts"] = pd.to_datetime(prices["ts"])
+    prices = prices.sort_values(["symbol", "ts"])
+    prices["prev_close"] = prices.groupby("symbol")["close"].shift(1)
+    valid = (prices["volume"] > 0) & (prices["close"] != prices["prev_close"])
+    prices = prices.loc[valid].copy()
+    prices["fwd_ret"] = (
+        prices.groupby("symbol")["close"].shift(-1) / prices["close"] - 1.0
+    )
 
-    merged = alphas.merge(prices, on=["symbol", "ts"], how="inner")
+    merged = alphas.merge(prices[["symbol", "ts", "fwd_ret"]], on=["symbol", "ts"], how="inner")
     merged = merged.dropna(subset=["fwd_ret"])
     if merged.empty:
         raise ValueError("No overlap between alphas and prices after merge.")
@@ -102,8 +110,8 @@ def main() -> None:
         return dict(label=label, n_days=n, mean_ic=mean_ic, std_ic=std_ic, tstat_ic=tstat)
 
     rows = [
-        summarize(ic_base, "alpha_008_baseline"),
-        summarize(ic_lag1, "alpha_008_lag1"),
+        summarize(ic_base, "alpha_008_baseline_filtered_v1"),
+        summarize(ic_lag1, "alpha_008_lag1_filtered_v1"),
     ]
     out_df = pd.DataFrame.from_records(rows)
     out_df.to_csv(out_path, index=False)
