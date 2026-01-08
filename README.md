@@ -484,6 +484,45 @@ python scripts/research/alphas101_tearsheet_v0.py \
   --out_pdf artifacts/research/101_alphas/alphas101_tearsheet_v1_adv10m.pdf
 ```
 
+## Research (kuma_trend)
+
+A long-only breakout trend-following prototype on BTC/ETH/SOL/SUI/BCH.
+
+Logic (v0):
+- Universe: BTC-USD, ETH-USD, SOL-USD, SUI-USD, BCH-USD (from `bars_1d_usd_universe_clean`).
+- Entry:
+  - 20-day breakout: close > prior 20-day high (excluding today).
+  - 5-day MA > 40-day MA filter.
+- Stops:
+  - Initial stop at entry: close - 2 × ATR(20).
+  - Trailing stop: 2 × ATR_entry below the highest close since entry.
+  - Exit when close <= trailing stop; re-entry on new breakout + MA filter.
+- Sizing:
+  - Long-only, inverse 20-day realized volatility within active names.
+  - 5% cash buffer: fully invested days target 95% gross long.
+  - Residual sits in USD earning 4% annual (daily).
+- Turnover:
+  - Two-sided equity turnover: 0.5 × Σ |w_t − w_{t-1}|.
+
+Usage:
+
+```bash
+# Backtest
+python scripts/research/run_kuma_trend_backtest_v0.py \
+  --db ../data/coinbase_daily_121025.duckdb \
+  --table bars_1d_usd_universe_clean \
+  --symbols "BTC-USD ETH-USD SOL-USD SUI-USD BCH-USD" \
+  --start 2017-01-01 \
+  --end   2025-01-01 \
+  --cash_yield_annual 0.04 \
+  --out_dir artifacts/research/kuma_trend
+
+# Metrics
+python scripts/research/kuma_trend_metrics_v0.py \
+  --equity artifacts/research/kuma_trend/kuma_trend_equity_v0.csv \
+  --out artifacts/research/kuma_trend/metrics_kuma_trend_v0.csv
+```
+
 ## Tests
 
 ```bash
