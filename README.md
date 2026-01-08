@@ -315,6 +315,10 @@ python scripts/research/alphas101_tearsheet_v0.py \
   --out_pdf artifacts/research/101_alphas/alphas101_tearsheet_v0.pdf
 ```
 
+V1 ADV>10M remediation & tear sheet:
+- Overview: `docs/research/101_alphas_v1_overview.md`
+- Tear sheet: `artifacts/research/101_alphas/alphas101_tearsheet_v1_adv10m.pdf`
+
 ### Phase 5: V1 remediation (ADV>10M, ghost-filtered IC, standardized turnover)
 
 Turnover definition: two-sided equity turnover = 0.5 * sum_s |w_t - w_{t-1}|.
