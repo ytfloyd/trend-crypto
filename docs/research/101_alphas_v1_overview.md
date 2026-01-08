@@ -50,6 +50,28 @@ Interpretation: Strategy remains attractive through ~20–30 bps per-side costs;
 - Average two-sided turnover (ensemble_turnover_v0.csv): ~0.148 per day (median 0.15).  
 - Capacity sensitivity (capacity_sensitivity_v1.csv): Sharpe declines smoothly from 1.78 (0 bps) to 0.49 (50 bps); table includes cagr/vol/max_dd per cost tier.
 
+## Symbol-Level Exposure & Turnover (ADV>10M V1)
+- Top exposures are balanced across BTC/ETH/SOL/LTC/DOGE/LINK, etc.; avg |weight| for BTC/ETH ~3.3%.  
+- Portfolio typically holds ~75% of dates for the top names; BTC+ETH share ~12.9% of total |weight| (matches concentration summary).  
+- Turnover contributions: BTC/ETH each ~10% of daily turnover; top names collectively drive most flow while remaining diversified.
+
+Top 10 by avg_abs_weight:
+
+| symbol  | avg_abs_weight | holding_ratio | turnover_share_pct |
+| --- | --- | --- | --- |
+| ETH-USD | 0.0332 | 75.2% | 10.0% |
+| BTC-USD | 0.0332 | 75.2% | 10.4% |
+| SOL-USD | 0.0309 | 76.7% | 9.3% |
+| LTC-USD | 0.0232 | 66.5% | 7.4% |
+| DOGE-USD | 0.0229 | 73.5% | 7.0% |
+| LINK-USD | 0.0221 | 66.1% | 6.9% |
+| XRP-USD | 0.0160 | 56.8% | 5.3% |
+| AVAX-USD | 0.0142 | 57.5% | 4.3% |
+| SHIB-USD | 0.0124 | 62.5% | 3.8% |
+| ADA-USD | 0.0116 | 45.7% | 3.7% |
+
+Full tables: `alphas101_symbol_stats_v1_adv10m.csv` and `alphas101_symbol_stats_top20_v1_adv10m.csv`.
+
 ## Implementation Notes
 - Long-only with cash buffer; no funding-rate risk (no perps).  
 - Daily rebalance in research; can bucket in implementation if needed.  

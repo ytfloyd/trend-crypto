@@ -105,6 +105,7 @@ def make_tearsheet(
     concentration_path: Optional[str] = None,
     regimes_path: Optional[str] = None,
     capacity_path: Optional[str] = None,
+    symbol_stats_top_path: Optional[str] = None,
 ) -> None:
     # Resolve paths (with sensible defaults)
     rd = research_dir
@@ -158,6 +159,11 @@ def make_tearsheet(
         if os.path.exists(cap_default):
             capacity_path = cap_default
     capacity = _load_csv_optional(capacity_path) if capacity_path else None
+    if symbol_stats_top_path is None:
+        sym_default = os.path.join(rd, "alphas101_symbol_stats_top20_v1_adv10m.csv")
+        if os.path.exists(sym_default):
+            symbol_stats_top_path = sym_default
+    symbol_stats_top = _load_csv_optional(symbol_stats_top_path) if symbol_stats_top_path else None
 
     # Join regimes into equity
     equity = equity.sort_values("ts").reset_index(drop=True)
@@ -439,7 +445,31 @@ def make_tearsheet(
         pdf.savefig(fig)
         plt.close(fig)
 
-        # Page 7: Return distribution
+        # Page 7: Symbol exposure & turnover (top 20) if available
+        if symbol_stats_top is not None and not symbol_stats_top.empty:
+            fig, ax = plt.subplots(figsize=(11, 8.5))
+            ax.axis("off")
+
+            cols = ["symbol", "avg_abs_weight", "holding_ratio", "turnover_share_pct"]
+            tbl = symbol_stats_top[cols].copy()
+            tbl["avg_abs_weight"] = tbl["avg_abs_weight"].map(lambda x: f"{x:.4f}")
+            tbl["holding_ratio"] = tbl["holding_ratio"].map(lambda x: f"{x:.2%}")
+            tbl["turnover_share_pct"] = tbl["turnover_share_pct"].map(lambda x: f"{x*100:.2f}%")
+
+            table = ax.table(
+                cellText=tbl.values,
+                colLabels=tbl.columns,
+                loc="center",
+                cellLoc="center",
+            )
+            table.scale(1, 1.5)
+            ax.set_title("Symbol Exposure & Turnover (Top 20)", fontsize=14, pad=10)
+            pdf.savefig(fig)
+            plt.close(fig)
+        else:
+            print("[alphas101_tearsheet_v0] Symbol stats not found; skipping symbol exposure page.")
+
+        # Page 8: Return distribution
         fig, ax = plt.subplots(figsize=(11, 8.5))
         ax.hist(equity["portfolio_ret"], bins=50, alpha=0.8)
         ax.set_xlabel("Daily return")

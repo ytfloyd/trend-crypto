@@ -319,6 +319,18 @@ V1 ADV>10M remediation & tear sheet:
 - Overview: `docs/research/101_alphas_v1_overview.md`
 - Tear sheet: `artifacts/research/101_alphas/alphas101_tearsheet_v1_adv10m.pdf`
 
+Symbol-level stats (ADV>10M V1):
+
+```bash
+python scripts/research/alphas101_symbol_stats_v1.py \
+  --weights artifacts/research/101_alphas/ensemble_weights_v0.parquet \
+  --turnover artifacts/research/101_alphas/ensemble_turnover_v0.csv \
+  --equity artifacts/research/101_alphas/ensemble_equity_v0.csv \
+  --out_symbol artifacts/research/101_alphas/alphas101_symbol_stats_v1_adv10m.csv \
+  --out_top artifacts/research/101_alphas/alphas101_symbol_stats_top20_v1_adv10m.csv \
+  --top_n 20
+```
+
 ### Phase 5: V1 remediation (ADV>10M, ghost-filtered IC, standardized turnover)
 
 Turnover definition: two-sided equity turnover = 0.5 * sum_s |w_t - w_{t-1}|.
