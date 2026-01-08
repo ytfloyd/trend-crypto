@@ -521,6 +521,11 @@ python scripts/research/run_kuma_trend_backtest_v0.py \
 python scripts/research/kuma_trend_metrics_v0.py \
   --equity artifacts/research/kuma_trend/kuma_trend_equity_v0.csv \
   --out artifacts/research/kuma_trend/metrics_kuma_trend_v0.csv
+
+# Tear sheet
+python scripts/research/kuma_trend_tearsheet_v0.py \
+  --research_dir artifacts/research/kuma_trend \
+  --out_pdf artifacts/research/kuma_trend/kuma_trend_tearsheet_v0.pdf
 ```
 
 ## Tests
