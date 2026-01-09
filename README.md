@@ -489,7 +489,7 @@ python scripts/research/alphas101_tearsheet_v0.py \
 A long-only breakout trend-following prototype on BTC/ETH/SOL/SUI/BCH.
 
 Logic (v0):
-- Universe: BTC-USD, ETH-USD, SOL-USD, SUI-USD, BCH-USD (from `bars_1d_usd_universe_clean`).
+- Universe (default; overridable via `--symbols`): BTC-USD, ETH-USD, LTC-USD, BCH-USD, EOS-USD, OXT-USD, XLM-USD, XTZ-USD, ETC-USD, LINK-USD, REP-USD, ZRX-USD, KNC-USD, DASH-USD, MKR-USD, ATOM-USD, OMG-USD, ALGO-USD, COMP-USD, BAND-USD, NMR-USD, CGLD-USD, UMA-USD, LRC-USD, YFI-USD, UNI-USD, REN-USD, SOL-USD, SUI-USD (from `bars_1d_usd_universe_clean`).
 - Entry:
   - 20-day breakout: close > prior 20-day high (excluding today).
   - 5-day MA > 40-day MA filter.

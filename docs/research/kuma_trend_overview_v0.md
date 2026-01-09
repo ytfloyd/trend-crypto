@@ -20,7 +20,14 @@ Capture large, sustained uptrends in major crypto assets while:
 Goal: better downside control versus “always long crypto” (e.g., BTC/ETH buy-and-hold), with improved risk-adjusted returns in trending regimes.
 
 ## 3. Universe & Data
-- **Symbols (v0):** BTC-USD, ETH-USD, SOL-USD, SUI-USD, BCH-USD.  
+- **Universe (default):** Spot USD pairs on Coinbase with daily data in DuckDB:
+  - BTC-USD, ETH-USD, LTC-USD, BCH-USD, EOS-USD
+  - OXT-USD, XLM-USD, XTZ-USD, ETC-USD, LINK-USD
+  - REP-USD, ZRX-USD, KNC-USD, DASH-USD, MKR-USD
+  - ATOM-USD, OMG-USD, ALGO-USD, COMP-USD, BAND-USD
+  - NMR-USD, CGLD-USD, UMA-USD, LRC-USD, YFI-USD
+  - UNI-USD, REN-USD, SOL-USD, SUI-USD
+  - The default universe can be overridden via `--symbols`.
 - **Data source:** DuckDB `../data/coinbase_daily_121025.duckdb`, view/table `bars_1d_usd_universe_clean` (daily OHLCV, vwap/close).  
 - **Sample period (v0 backtest):** 2023-01-01 to 2025-01-01.  
 - Liquidity: large-cap/upper-midcap USD spot pairs; no additional ADV filter in v0.
@@ -107,4 +114,36 @@ Subperiods: strong performance in 2020–2021 trends (Sharpe ~5.15), weaker/chop
 - Research-only, backtested results; no guarantee of future performance.  
 - Liquidity, fees, and operational frictions may materially reduce returns.  
 - Not investment advice.
+
+## Status & Next Steps (v0 – Archived Research)
+
+**Status (as of 2026-01-07)**  
+- Branch: `research/kuma_trend`  
+- Tag: `v0.3-kuma-trend-expanded-universe` (archived research snapshot)  
+- Artifacts:  
+  - Backtest: `artifacts/research/kuma_trend/kuma_trend_equity_v0.csv`, `kuma_trend_turnover_v0.csv`, `kuma_trend_weights_v0.parquet`, `kuma_trend_positions_v0.parquet`  
+  - Metrics: `metrics_kuma_trend_v0.csv`  
+  - Tear sheet: `kuma_trend_tearsheet_v0.pdf`  
+
+**Key findings**  
+- Strategy: 20-day breakout + MA(5) > MA(40) filter, 2×ATR(20) trailing stops, inverse-vol(20) sizing across the expanded universe, 5% USD cash buffer, idle cash earns ~4% annualized.  
+- Universe: BTC, ETH, SOL, SUI, BCH plus expanded list (LTC, ETC, LINK, XLM, XTZ, KNC, DASH, MKR, ATOM, ALGO, COMP, BAND, NMR, CGLD, UMA, LRC, YFI, UNI, REN, etc.; missing symbols such as EOS/OMG/REN/REP may be skipped with warnings).  
+- Turnover: low on average (mean ~4.8% two-sided daily equity turnover; median ~0; 75th pct ~0.0065).  
+- Performance profile: strong in pre-2020 and 2020–2021 trend regimes; struggles in 2022; much weaker in 2023+ (Sharpe near flat).  
+
+**Drawdown caveat**  
+- Reported max drawdown is extreme (~-99%) when measured vs historical peak equity, but equity never approaches zero (min equity ~0.64 vs peak ~79).  
+- Cause: very large run-up early in the sample and subsequent normalization; a conservative peak-to-trough measure over the full history.  
+- Interpretation: risk-measurement artifact of a high-beta, long-only breakout system on volatile assets; highlights pro-cyclicality to crypto bull/bear cycles and the need for explicit risk scaling/regime controls.  
+
+**Why archived**  
+- No explicit volatility target or dynamic capital scaling.  
+- No tailored ADV/participation constraints or regime-aware risk overlay beyond stops.  
+- Not slated for deployment in current form; kept as a clean reference implementation.  
+
+**Future work ideas**  
+- Add volatility targeting and/or drawdown-aware scaling.  
+- Add ADV/participation constraints and capacity analysis.  
+- Explore regime filters to cut exposure in crash-prone regimes.  
+- Consider hybrid use with cross-sectional signals (e.g., breakout as a regime gate).
 

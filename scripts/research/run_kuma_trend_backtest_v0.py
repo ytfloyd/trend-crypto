@@ -21,7 +21,35 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--symbols",
-        default="BTC-USD ETH-USD SOL-USD SUI-USD BCH-USD",
+        default=" ".join(
+            [
+                "BTC-USD",
+                "ETH-USD",
+                "LTC-USD",
+                "BCH-USD",
+                "OXT-USD",
+                "XLM-USD",
+                "XTZ-USD",
+                "ETC-USD",
+                "LINK-USD",
+                "ZRX-USD",
+                "KNC-USD",
+                "DASH-USD",
+                "MKR-USD",
+                "ATOM-USD",
+                "ALGO-USD",
+                "COMP-USD",
+                "BAND-USD",
+                "NMR-USD",
+                "CGLD-USD",
+                "UMA-USD",
+                "LRC-USD",
+                "YFI-USD",
+                "UNI-USD",
+                "SOL-USD",
+                "SUI-USD",
+            ]
+        ),
         help="Space-separated list of symbols.",
     )
     p.add_argument("--start", required=True, help="Start date (inclusive, e.g., 2017-01-01)")
@@ -65,9 +93,48 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     symbols = [s.strip() for s in args.symbols.split() if s.strip()]
+    if not symbols:
+        symbols = [
+            "BTC-USD",
+            "ETH-USD",
+            "LTC-USD",
+            "BCH-USD",
+            "EOS-USD",
+            "OXT-USD",
+            "XLM-USD",
+            "XTZ-USD",
+            "ETC-USD",
+            "LINK-USD",
+            "REP-USD",
+            "ZRX-USD",
+            "KNC-USD",
+            "DASH-USD",
+            "MKR-USD",
+            "ATOM-USD",
+            "OMG-USD",
+            "ALGO-USD",
+            "COMP-USD",
+            "BAND-USD",
+            "NMR-USD",
+            "CGLD-USD",
+            "UMA-USD",
+            "LRC-USD",
+            "YFI-USD",
+            "UNI-USD",
+            "REN-USD",
+            "SOL-USD",
+            "SUI-USD",
+        ]
     panel = load_panel(db_path, args.table, symbols, args.start, args.end)
-    if panel.empty:
+    available = set(panel["symbol"].unique())
+    requested = set(symbols)
+    missing = sorted(requested - available)
+    if missing:
+        print(f"[kuma_trend] WARNING: symbols not found in {args.table}: {missing}")
+    symbols = sorted(available & requested)
+    if panel.empty or not symbols:
         raise RuntimeError("No data loaded for the requested symbols/date range.")
+    panel = panel[panel["symbol"].isin(symbols)]
 
     cfg = KumaConfig(
         breakout_lookback=20,
