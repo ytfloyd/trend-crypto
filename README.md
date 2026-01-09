@@ -484,6 +484,30 @@ python scripts/research/alphas101_tearsheet_v0.py \
   --out_pdf artifacts/research/101_alphas/alphas101_tearsheet_v1_adv10m.pdf
 ```
 
+## Strategy Registry (research)
+
+For quick visibility into research strategies and their canonical performance:
+
+```bash
+cd /Users/russellfloyd/Dropbox/NRT/nrt_dev/trend_crypto
+source venv_trend_crypto/bin/activate
+
+# List all strategies with full-period CAGR / Sharpe / MaxDD
+venv_trend_crypto/bin/python scripts/research/strategy_registry_v0.py list
+
+# Inspect a specific strategy (e.g., 101_alphas V1 ADV>10M)
+venv_trend_crypto/bin/python scripts/research/strategy_registry_v0.py show --id alphas101_v1_adv10m
+
+# (Optional) Re-run the full pipeline for a strategy from the current HEAD
+venv_trend_crypto/bin/python scripts/research/strategy_registry_v0.py run --id alphas101_v1_adv10m
+```
+
+Registry config: `docs/research/strategy_registry_v0.json`, which defines:
+- `metrics_csv` + `metrics_period` (canonical metrics source)
+- `equity_csv` / `tearsheet_pdf` (equity curves and tear sheets)
+- `run_recipe` (canonical recompute commands)
+- `git_tag` (tag capturing the original run, especially for legacy/archived strategies)
+
 ## Tests
 
 ```bash

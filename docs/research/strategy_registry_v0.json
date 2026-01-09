@@ -1,0 +1,104 @@
+{
+  "strategies": [
+    {
+      "id": "alphas101_v1_adv10m",
+      "name": "Alpha 101 V1 ADV>10M (ghost-filtered, long+cash)",
+      "family": "alphas101",
+      "version": "v1",
+      "status": "canonical",
+      "universe": "bars_1d_usd_universe_clean_adv10m",
+      "equity_csv": "artifacts/research/101_alphas/ensemble_equity_v0.csv",
+      "metrics_csv": "artifacts/research/101_alphas/metrics_101_ensemble_filtered_v1.csv",
+      "metrics_period": "full",
+      "tearsheet_pdf": "artifacts/research/101_alphas/alphas101_tearsheet_v1_adv10m.pdf",
+      "canonical_period": {
+        "start": "2023-01-01",
+        "end": "2024-12-31"
+      },
+      "git_tag": "v0.3-101-alphas-custom-201-220",
+      "run_recipe": [
+        "source venv_trend_crypto/bin/activate",
+        "venv_trend_crypto/bin/python scripts/research/create_usd_universe_adv10m_view.py --db ../data/coinbase_daily_121025.duckdb",
+        "venv_trend_crypto/bin/python scripts/research/run_101_alphas_compute_v0.py --db ../data/coinbase_daily_121025.duckdb --table bars_1d_usd_universe_clean_adv10m --start 2023-01-01 --end 2025-01-01 --out artifacts/research/101_alphas/alphas_101_v1_adv10m.parquet",
+        "venv_trend_crypto/bin/python scripts/research/alphas101_ic_panel_v0.py --alphas artifacts/research/101_alphas/alphas_101_v1_adv10m.parquet --db ../data/coinbase_daily_121025.duckdb --price_table bars_1d_usd_universe_clean_adv10m --horizon 1 --out_csv artifacts/research/101_alphas/alphas101_ic_panel_v1_adv10m_filtered.csv",
+        "venv_trend_crypto/bin/python scripts/research/alphas101_regime_labels_v0.py --alphas artifacts/research/101_alphas/alphas_101_v1_adv10m.parquet --out artifacts/research/101_alphas/alphas101_regimes_v1_adv10m.csv",
+        "venv_trend_crypto/bin/python scripts/research/alphas101_select_v0.py --ic_panel artifacts/research/101_alphas/alphas101_ic_panel_v1_adv10m_filtered.csv --min_tstat 3.0 --min_mean_ic 0.01 --min_n_days 400 --max_alphas 40 --out artifacts/research/101_alphas/alphas101_selected_v1_adv10m.csv",
+        "venv_trend_crypto/bin/python scripts/research/run_101_alphas_ensemble_v0.py --alphas artifacts/research/101_alphas/alphas_101_v1_adv10m.parquet --db ../data/coinbase_daily_121025.duckdb --price_table bars_1d_usd_universe_clean_adv10m --out_dir artifacts/research/101_alphas --target_gross 1.0 --cash_yield_annual 0.04 --alpha_selection_csv artifacts/research/101_alphas/alphas101_selected_v1_adv10m.csv --regime_csv artifacts/research/101_alphas/alphas101_regimes_v1_adv10m.csv --regime_mode danger_cash",
+        "venv_trend_crypto/bin/python scripts/research/alphas101_metrics_v0.py --equity artifacts/research/101_alphas/ensemble_equity_v0.csv --out artifacts/research/101_alphas/metrics_101_ensemble_filtered_v1.csv",
+        "venv_trend_crypto/bin/python scripts/research/alphas101_capacity_sensitivity_v1.py --metrics_dir artifacts/research/101_alphas --base_metrics metrics_101_ensemble_filtered_v1.csv --cost_metrics_glob \"metrics_101_ensemble_filtered_v1_costs_bps*.csv\" --out capacity_sensitivity_v1.csv",
+        "venv_trend_crypto/bin/python scripts/research/alphas101_tearsheet_v0.py --research_dir artifacts/research/101_alphas --out_pdf artifacts/research/101_alphas/alphas101_tearsheet_v1_adv10m.pdf"
+      ]
+    },
+    {
+      "id": "alphas101_v0_full_usd_legacy",
+      "name": "Alpha 101 V0 full USD universe (legacy high-CAGR run)",
+      "family": "alphas101",
+      "version": "v0",
+      "status": "archived",
+      "universe": "bars_1d_usd_universe_clean",
+      "equity_csv": null,
+      "metrics_csv": "artifacts/research/101_alphas/metrics_101_alphas_ensemble_v0.csv",
+      "metrics_period": "full",
+      "tearsheet_pdf": "artifacts/research/101_alphas/alphas101_tearsheet_v0.pdf",
+      "canonical_period": {
+        "start": "2023-01-01",
+        "end": "2024-12-31"
+      },
+      "git_tag": "v0.1-101-alphas-stack",
+      "run_recipe": [
+        "# To exactly reproduce this legacy run, do:",
+        "#   git checkout v0.1-101-alphas-stack",
+        "#   and follow the README in that tag (Phase 3/4 pipeline)."
+      ]
+    },
+    {
+      "id": "alphas101_v1_adv10m_base_concentration",
+      "name": "Alpha 101 V1 ADV>10M – Base vs Growth concentration experiment (2021-11-01+)",
+      "family": "alphas101",
+      "version": "v1",
+      "status": "experiment",
+      "universe": "bars_1d_usd_universe_clean_adv10m",
+      "equity_csv": null,
+      "metrics_csv": "artifacts/research/101_alphas/metrics_101_ensemble_v1_base_vs_growth.csv",
+      "metrics_period": "base_vs_growth",
+      "tearsheet_pdf": null,
+      "canonical_period": {
+        "start": "2021-11-01",
+        "end": "2024-12-31"
+      },
+      "git_tag": "v0.4-101-alphas-symbol-stats",
+      "run_recipe": [
+        "source venv_trend_crypto/bin/activate",
+        "# Base sleeve (defensive):",
+        "venv_trend_crypto/bin/python scripts/research/run_101_alphas_ensemble_v0.py --alphas artifacts/research/101_alphas/alphas_101_v1_adv10m.parquet --db ../data/coinbase_daily_121025.duckdb --price_table bars_1d_usd_universe_clean_adv10m --out_dir artifacts/research/101_alphas --target_gross 1.0 --cash_yield_annual 0.04 --alpha_selection_csv artifacts/research/101_alphas/alphas101_selected_v1_adv10m.csv --regime_csv artifacts/research/101_alphas/alphas101_regimes_v1_adv10m.csv --regime_mode danger_cash --concentration_top_k 0 --output_suffix v1_base",
+        "# Growth sleeve (Top-10 concentration):",
+        "venv_trend_crypto/bin/python scripts/research/run_101_alphas_ensemble_v0.py --alphas artifacts/research/101_alphas/alphas_101_v1_adv10m.parquet --db ../data/coinbase_daily_121025.duckdb --price_table bars_1d_usd_universe_clean_adv10m --out_dir artifacts/research/101_alphas --target_gross 1.0 --cash_yield_annual 0.04 --alpha_selection_csv artifacts/research/101_alphas/alphas101_selected_v1_adv10m.csv --regime_csv artifacts/research/101_alphas/alphas101_regimes_v1_adv10m.csv --regime_mode danger_cash --concentration_top_k 10 --concentration_fraction 0.20 --max_weight_core 0.0025 --max_weight_top 0.02 --output_suffix v1_growth",
+        "venv_trend_crypto/bin/python scripts/research/alphas101_concentration_compare_v1.py --base_equity artifacts/research/101_alphas/ensemble_equity_v1_base.csv --growth_equity artifacts/research/101_alphas/ensemble_equity_v1_growth.csv --start_date 2021-11-01 --out_csv artifacts/research/101_alphas/metrics_101_ensemble_v1_base_vs_growth.csv"
+      ]
+    },
+    {
+      "id": "kuma_trend_v0",
+      "name": "kuma_trend v0 (20d breakout, MA(5/40), ATR(20) trails, inverse-vol(20))",
+      "family": "kuma_trend",
+      "version": "v0",
+      "status": "canonical",
+      "universe": "bars_1d_usd_universe_clean_adv10m (subset of symbols)",
+      "equity_csv": "artifacts/research/kuma_trend/kuma_trend_equity_v0.csv",
+      "metrics_csv": "artifacts/research/kuma_trend/metrics_kuma_trend_v0.csv",
+      "metrics_period": "full",
+      "tearsheet_pdf": "artifacts/research/kuma_trend/kuma_trend_tearsheet_v0.pdf",
+      "canonical_period": {
+        "start": "2017-01-01",
+        "end": "2025-12-15"
+      },
+      "git_tag": "v0.3-kuma-trend-expanded-universe",
+      "run_recipe": [
+        "source venv_trend_crypto/bin/activate",
+        "venv_trend_crypto/bin/python scripts/research/run_kuma_trend_backtest_v0.py --db ../data/coinbase_daily_121025.duckdb --table bars_1d_usd_universe_clean_adv10m --start 2017-01-01 --end 2025-12-15 --out_dir artifacts/research/kuma_trend",
+        "venv_trend_crypto/bin/python scripts/research/kuma_trend_metrics_v0.py --equity artifacts/research/kuma_trend/kuma_trend_equity_v0.csv --turnover artifacts/research/kuma_trend/kuma_trend_turnover_v0.csv --out artifacts/research/kuma_trend/metrics_kuma_trend_v0.csv",
+        "venv_trend_crypto/bin/python scripts/research/kuma_trend_tearsheet_v0.py --research_dir artifacts/research/kuma_trend --out_pdf artifacts/research/kuma_trend/kuma_trend_tearsheet_v0.pdf"
+      ]
+    }
+  ]
+}
+

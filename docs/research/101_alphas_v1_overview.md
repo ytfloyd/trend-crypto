@@ -2,6 +2,9 @@
 
 Branch / tag: `research/101-alphas-v1-remediation`, tag `v0.3-101-alphas-custom-201-220`
 
+Strategy ID in registry: `alphas101_v1_adv10m`  
+See `scripts/research/strategy_registry_v0.py show --id alphas101_v1_adv10m` for the canonical pipeline and metrics source.
+
 ## Strategy Overview
 - Universes  
   - Base: Coinbase USD spot pairs (ex-stablecoins).  
