@@ -50,6 +50,26 @@ Interpretation: Strategy remains attractive through ~20–30 bps per-side costs;
 - Average two-sided turnover (ensemble_turnover_v0.csv): ~0.148 per day (median 0.15).  
 - Capacity sensitivity (capacity_sensitivity_v1.csv): Sharpe declines smoothly from 1.78 (0 bps) to 0.49 (50 bps); table includes cagr/vol/max_dd per cost tier.
 
+### V1 Concentration Experiment: Base vs Growth (ADV>10M, 2021-11-01+)
+Using `alphas101_concentration_compare_v1.py` on:
+- Base equity: `ensemble_equity_v1_base.csv`
+- Growth equity: `ensemble_equity_v1_growth.csv`
+- Start date: 2021-11-01
+
+| Variant   | n_days | Total Return | CAGR  | Vol (ann.) | Sharpe | MaxDD   |
+|-----------|--------|--------------|-------|------------|--------|---------|
+| V1 Base   |  731   | ~12.4%       | ~6.0% | ~1.7%      | ~3.45  | ~‑0.9% |
+| V1 Growth |  731   | ~36.6%       | ~16.8%| ~8.5%      | ~1.98  | ~‑6.1% |
+
+Trade-off (Growth – Base):
+- ΔCAGR ≈ +10.8 pts
+- ΔMaxDD ≈ ‑5.2 pts (deeper drawdown)
+
+Interpretation:
+- Growth sleeve roughly triples total return over the window, at the cost of higher but still modest drawdown.
+- Base remains the defensive/yield profile; Growth is the convexity overlay (Top‑10 sleeve at 20% gross, 2% cap).
+- Canonical V1 filtered performance (CAGR ~48.5%, Sharpe ~1.78, MaxDD ~‑22.6%) still comes from `ensemble_equity_v0.csv` and `metrics_101_ensemble_filtered_v1.csv`; the concentration experiment is additive and does not change the canonical V1 tear sheet (`alphas101_tearsheet_v1_adv10m.pdf`).
+
 ## Symbol-Level Exposure & Turnover (ADV>10M V1)
 - Top exposures are balanced across BTC/ETH/SOL/LTC/DOGE/LINK, etc.; avg |weight| for BTC/ETH ~3.3%.  
 - Portfolio typically holds ~75% of dates for the top names; BTC+ETH share ~12.9% of total |weight| (matches concentration summary).  
