@@ -124,7 +124,27 @@ Subperiods: strong performance in 2020–2021 trends (Sharpe ~5.15), weaker/chop
 - Integrate into broader engine / production backtest if promoted.  
 - Consider expanding universe to other majors once stable.
 
-## 12. Disclaimers
+## 12. Benchmarks (optional)
+- You can overlay BTC-USD buy-and-hold on the tear sheet by providing `--benchmark_equity_csv`:
+  - Build benchmark aligned to kuma_trend equity:
+    ```
+    venv_trend_crypto/bin/python scripts/research/benchmark_btc_hold_v0.py \
+      --db ../data/coinbase_daily_121025.duckdb \
+      --price_table bars_1d_usd_universe_clean \
+      --symbol BTC-USD \
+      --equity_csv artifacts/research/kuma_trend/kuma_trend_equity_v0.csv \
+      --out_csv artifacts/research/kuma_trend/benchmark_btc_usd_equity_v0.csv
+    ```
+  - Regenerate tear sheet with overlay:
+    ```
+    venv_trend_crypto/bin/python scripts/research/kuma_trend_tearsheet_v0.py \
+      --research_dir artifacts/research/kuma_trend \
+      --out_pdf artifacts/research/kuma_trend/kuma_trend_tearsheet_v0.pdf \
+      --strategy_note_md docs/research/kuma_trend_overview_v0.md \
+      --benchmark_equity_csv artifacts/research/kuma_trend/benchmark_btc_usd_equity_v0.csv
+    ```
+
+## 13. Disclaimers
 - Research-only, backtested results; no guarantee of future performance.  
 - Liquidity, fees, and operational frictions may materially reduce returns.  
 - Not investment advice.

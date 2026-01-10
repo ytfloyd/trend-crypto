@@ -1,4 +1,4 @@
-# 101 Alphas – USD Universe Ensemble (V1 ADV>10M, 2017–2025)
+# Alpha Ensemble – USD Universe (V1 ADV>10M, 2017–2025)
 
 Branch / tag: `research/101-alphas-v1-remediation`, tag `v0.3-101-alphas-custom-201-220`
 
@@ -14,7 +14,7 @@ See `scripts/research/strategy_registry_v0.py show --id alphas101_v1_adv10m` for
   - Regime features (`alpha_c16`–`alpha_c20`).
 - Construction  
   - Daily cross-sectional ranking of selected alphas; average to a signed signal.  
-  - Long-only, long+cash; negative signals map to cash (no shorting).  
+- Long-only, long+cash; negative signals map to cash (no shorting).  
   - Danger-regime gating: on “danger” days, weights go to cash.  
   - Target gross ≈ 1.0; per-symbol weights normalized each day.
 
@@ -112,5 +112,5 @@ Full tables: `alphas101_symbol_stats_v1_adv10m.csv` and `alphas101_symbol_stats_
   - `alphas101_alpha008_bias_filtered_v1.csv`  
   - `alphas101_concentration_summary_v1_adv10m.csv`  
   - `capacity_sensitivity_v1.csv`  
-- Tear sheet: `alphas101_tearsheet_v1_adv10m.pdf`
+- Tear sheet: `alphas101_tearsheet_v1_adv10m.pdf` (supports optional BTC overlay via `--benchmark_equity_csv`)
 

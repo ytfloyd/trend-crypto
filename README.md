@@ -312,12 +312,30 @@ Tear sheet (multi-page PDF using existing artifacts):
 ```bash
 python scripts/research/alphas101_tearsheet_v0.py \
   --research_dir artifacts/research/101_alphas \
-  --out_pdf artifacts/research/101_alphas/alphas101_tearsheet_v0.pdf
+  --out_pdf artifacts/research/101_alphas/alphas101_tearsheet_v0.pdf \
+  --strategy_note_md docs/research/alphas101_v0_full_usd_legacy_ic_note.md
 ```
 
 V1 ADV>10M remediation & tear sheet:
 - Overview: `docs/research/101_alphas_v1_overview.md`
-- Tear sheet: `artifacts/research/101_alphas/alphas101_tearsheet_v1_adv10m.pdf`
+- Tear sheet: `artifacts/research/101_alphas/alphas101_tearsheet_v1_adv10m.pdf` (use `--strategy_note_md docs/research/alphas101_ic_note_v0.md` if regenerating)
+- BTC benchmark overlay (optional):
+  ```bash
+  python scripts/research/benchmark_btc_hold_v0.py \
+    --db ../data/coinbase_daily_121025.duckdb \
+    --price_table bars_1d_usd_universe_clean_adv10m \
+    --symbol BTC-USD \
+    --equity_csv artifacts/research/101_alphas/ensemble_equity_v0.csv \
+    --out_csv artifacts/research/101_alphas/benchmark_btc_usd_equity_v0.csv
+
+  python scripts/research/alphas101_tearsheet_v0.py \
+    --research_dir artifacts/research/101_alphas \
+    --metrics_csv artifacts/research/101_alphas/metrics_101_ensemble_filtered_v1.csv \
+    --capacity_csv artifacts/research/101_alphas/capacity_sensitivity_v1.csv \
+    --strategy_note_md docs/research/alphas101_ic_note_v0.md \
+    --benchmark_equity_csv artifacts/research/101_alphas/benchmark_btc_usd_equity_v0.csv \
+    --out_pdf artifacts/research/101_alphas/alphas101_tearsheet_v1_adv10m.pdf
+  ```
 
 Symbol-level stats (ADV>10M V1):
 
@@ -481,7 +499,25 @@ Tear sheet (prefers V1 artifacts if present):
 ```bash
 python scripts/research/alphas101_tearsheet_v0.py \
   --research_dir artifacts/research/101_alphas \
-  --out_pdf artifacts/research/101_alphas/alphas101_tearsheet_v1_adv10m.pdf
+  --out_pdf artifacts/research/101_alphas/alphas101_tearsheet_v1_adv10m.pdf \
+  --strategy_note_md docs/research/alphas101_ic_note_v0.md \
+  --benchmark_equity_csv artifacts/research/101_alphas/benchmark_btc_usd_equity_v1_adv10m.csv \
+  --benchmark_label "BTC-USD Buy & Hold"
+```
+
+All research tear sheets use `scripts/research/tearsheet_common_v0.py` for equity loading, BTC benchmark overlay, and BTC vs Strategy summary tables.
+
+## Research (kuma_trend)
+
+Tear sheet with strategy note:
+
+```bash
+python scripts/research/kuma_trend_tearsheet_v0.py \
+  --research_dir artifacts/research/kuma_trend \
+  --out_pdf artifacts/research/kuma_trend/kuma_trend_tearsheet_v0.pdf \
+  --strategy_note_md docs/research/kuma_trend_overview_v0.md \
+  --benchmark_equity_csv artifacts/research/kuma_trend/benchmark_btc_usd_equity_v0.csv \
+  --benchmark_label "BTC-USD Buy & Hold"
 ```
 
 ## Strategy Registry (research)

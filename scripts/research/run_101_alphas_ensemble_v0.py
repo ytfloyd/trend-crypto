@@ -135,6 +135,78 @@ def apply_turnover_cap(
     return capped, float(realized_turnover)
 
 
+def build_weights_with_concentration(
+    df: pd.DataFrame,
+    target_gross: float = 1.0,
+    top_k: int = 0,
+    frac_conc: float = 0.0,
+    max_weight_core: float = 0.0025,
+    max_weight_top: float = 0.02,
+) -> pd.DataFrame:
+    """
+    Two-sleeve construction:
+
+    1) Concentrated sleeve: top K signals get `frac_conc` of the target gross,
+       with a looser cap `max_weight_top`.
+    2) Core sleeve: everyone else gets (1 - frac_conc) of target gross,
+       with a tighter cap `max_weight_core`.
+
+    Assumes df has columns: ts, symbol, signal (and possibly others).
+    Returns df with a new 'weight' column.
+    """
+    df = df.copy()
+    df["signal_pos"] = df["signal"].clip(lower=0.0)
+
+    def _per_ts(g: pd.DataFrame) -> pd.DataFrame:
+        g = g.sort_values("signal_pos", ascending=False)
+
+        total_sig = g["signal_pos"].sum()
+        if total_sig <= 0:
+            g["weight"] = 0.0
+            return g
+
+        if top_k > 0:
+            leaders_idx = g.index[:top_k]
+            mask_leader = g.index.isin(leaders_idx)
+        else:
+            mask_leader = np.zeros(len(g), dtype=bool)
+
+        sig_leader_sum = g.loc[mask_leader, "signal_pos"].sum()
+        sig_core_sum = g.loc[~mask_leader, "signal_pos"].sum()
+
+        if sig_leader_sum > 0 and top_k > 0:
+            alloc_conc = target_gross * frac_conc
+            alloc_core = target_gross * (1.0 - frac_conc)
+        else:
+            alloc_conc = 0.0
+            alloc_core = target_gross
+
+        g["w_raw"] = 0.0
+
+        if sig_leader_sum > 0 and alloc_conc > 0:
+            g.loc[mask_leader, "w_raw"] = alloc_conc * (
+                g.loc[mask_leader, "signal_pos"] / sig_leader_sum
+            )
+
+        if sig_core_sum > 0 and alloc_core > 0:
+            g.loc[~mask_leader, "w_raw"] = alloc_core * (
+                g.loc[~mask_leader, "signal_pos"] / sig_core_sum
+            )
+
+        g.loc[mask_leader, "w_raw"] = g.loc[mask_leader, "w_raw"].clip(
+            upper=max_weight_top
+        )
+        g.loc[~mask_leader, "w_raw"] = g.loc[~mask_leader, "w_raw"].clip(
+            upper=max_weight_core
+        )
+
+        g["weight"] = g["w_raw"]
+        return g
+
+    out = df.groupby("ts", group_keys=False).apply(_per_ts)
+    return out
+
+
 def build_weights(
     alpha_df: pd.DataFrame,
     target_gross: float,
@@ -180,34 +252,18 @@ def build_weights(
     signal.name = "signal"
     signal = signal.dropna()
 
-    weights_list: List[tuple] = []
-    for ts, s in signal.groupby(level="ts"):
-        s = s.droplevel("ts")  # index: symbol
-
-        if s.empty:
-            continue
-
-        s_pos = s[s > 0].copy()
-        s_neg = s[s < 0].copy()
-
-        sum_pos = float(s_pos.sum()) if not s_pos.empty else 0.0
-        sum_neg_abs = float((-s_neg).sum()) if not s_neg.empty else 0.0
-        denom = sum_pos + sum_neg_abs
-
-        if denom > 0.0 and sum_pos > 0.0:
-            tilt = sum_pos / denom  # in [0,1]
-            gross_long_ts = target_gross * tilt
-            raw_w = s_pos / sum_pos
-            w_ts = raw_w * gross_long_ts
-        else:
-            gross_long_ts = 0.0
-            w_ts = s * 0.0
-
-        for sym, w_sym in w_ts.items():
-            weights_list.append((ts, sym, float(w_sym)))
-
-    weights_df = pd.DataFrame(weights_list, columns=["ts", "symbol", "weight"])
-    weights_df = weights_df.sort_values(["ts", "symbol"]).reset_index(drop=True)
+    signal_df = signal.reset_index()
+    weights_df = build_weights_with_concentration(
+        signal_df,
+        target_gross=target_gross,
+        top_k=0,
+        frac_conc=0.0,
+        max_weight_core=0.0025,
+        max_weight_top=0.02,
+    )
+    weights_df = weights_df[["ts", "symbol", "weight"]].sort_values(
+        ["ts", "symbol"]
+    ).reset_index(drop=True)
     return weights_df
 
 
@@ -280,6 +336,36 @@ def main() -> None:
             "is multiplied by that sign before cross-sectional ranking."
         ),
     )
+    parser.add_argument(
+        "--concentration_top_k",
+        type=int,
+        default=0,
+        help="Number of assets in concentrated sleeve (0 = disabled).",
+    )
+    parser.add_argument(
+        "--concentration_fraction",
+        type=float,
+        default=0.20,
+        help="Fraction of target gross dedicated to top-K leaders.",
+    )
+    parser.add_argument(
+        "--max_weight_core",
+        type=float,
+        default=0.0025,
+        help="Max weight per core asset.",
+    )
+    parser.add_argument(
+        "--max_weight_top",
+        type=float,
+        default=0.02,
+        help="Max weight per top-K leader.",
+    )
+    parser.add_argument(
+        "--output_suffix",
+        type=str,
+        default="v1_base",
+        help="Suffix used in ensemble output filenames.",
+    )
 
     args = parser.parse_args()
     db_path = resolve_db_path(args)
@@ -317,7 +403,48 @@ def main() -> None:
     else:
         alpha_cols = [c for c in ENSEMBLE_ALPHA_NAMES if c in full_alpha_cols]
 
-    weights_df = build_weights(alpha_df, args.target_gross, alpha_cols, selection_signs)
+    # Build signal then apply concentration-aware weights
+    # Reuse build_weights for collinearity + z-scoring but override sleeve params
+    available = [c for c in alpha_cols if c in alpha_df.columns]
+
+    # Sanity check: drop alpha_c05 if highly collinear with alpha_c01
+    if "alpha_c01" in available and "alpha_c05" in available:
+        flat = alpha_df[["alpha_c01", "alpha_c05"]].dropna()
+        if not flat.empty:
+            corr = flat["alpha_c01"].corr(flat["alpha_c05"])
+            if corr is not None and abs(corr) > 0.7:
+                print(
+                    f"[run_101_alphas_ensemble_v0] |corr(alpha_c01, alpha_c05)|={corr:.3f} > 0.7; dropping alpha_c05 from ensemble"
+                )
+                available.remove("alpha_c05")
+
+    alpha_panel = alpha_df.set_index(["ts", "symbol"])[available]
+
+    if selection_signs is not None:
+        for col in available:
+            sign = selection_signs.get(col, 1.0)
+            if sign < 0:
+                alpha_panel[col] = -alpha_panel[col]
+
+    def _zscore_time(s: pd.Series) -> pd.Series:
+        m = s.mean()
+        v = s.std(ddof=0)
+        return (s - m) / (v + 1e-8)
+
+    alpha_z = alpha_panel.groupby(level="symbol").transform(_zscore_time)
+    signal = alpha_z.mean(axis=1)
+    signal.name = "signal"
+    signal = signal.dropna()
+    signal_df = signal.reset_index()
+
+    weights_df = build_weights_with_concentration(
+        signal_df,
+        target_gross=args.target_gross,
+        top_k=args.concentration_top_k,
+        frac_conc=args.concentration_fraction,
+        max_weight_core=args.max_weight_core,
+        max_weight_top=args.max_weight_top,
+    )
 
     returns_df = load_returns(db_path, args.price_table)
 
@@ -353,7 +480,7 @@ def main() -> None:
 
     weights_to_save = weights_df[["ts", "symbol", "weight"]].copy()
 
-    weights_out = out_dir / "ensemble_weights_v0.parquet"
+    weights_out = out_dir / f"ensemble_weights_{args.output_suffix}.parquet"
     weights_to_save.to_parquet(weights_out, index=False)
     print(
         f"[run_101_alphas_ensemble_v0] Wrote weights (per ts,symbol) to {weights_out}"
@@ -390,13 +517,13 @@ def main() -> None:
         )
 
     equity_df = pd.DataFrame(eq_rows).sort_values("ts")
-    equity_path = out_dir / "ensemble_equity_v0.csv"
+    equity_path = out_dir / f"ensemble_equity_{args.output_suffix}.csv"
     equity_df.to_csv(equity_path, index=False)
     print(
         f"[run_101_alphas_ensemble_v0] Wrote ensemble equity with {len(equity_df)} rows to {equity_path}"
     )
 
-    turnover_path = out_dir / "ensemble_turnover_v0.csv"
+    turnover_path = out_dir / f"ensemble_turnover_{args.output_suffix}.csv"
     turnover_df.to_csv(turnover_path, index=False)
     print(
         f"[run_101_alphas_ensemble_v0] Wrote turnover with {len(turnover_df)} rows to {turnover_path}"

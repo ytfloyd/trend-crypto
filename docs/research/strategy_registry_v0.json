@@ -2,7 +2,7 @@
   "strategies": [
     {
       "id": "alphas101_v1_adv10m",
-      "name": "Alpha 101 V1 ADV>10M (ghost-filtered, long+cash)",
+      "name": "Alpha Ensemble V1 ADV>10M (ghost-filtered, long+cash)",
       "family": "alphas101",
       "version": "v1",
       "status": "canonical",
@@ -31,7 +31,7 @@
     },
     {
       "id": "alphas101_v0_full_usd_legacy",
-      "name": "Alpha 101 V0 full USD universe (legacy high-CAGR run)",
+      "name": "Alpha Ensemble V0 full USD universe (legacy high-CAGR run)",
       "family": "alphas101",
       "version": "v0",
       "status": "archived",
@@ -39,12 +39,13 @@
       "equity_csv": null,
       "metrics_csv": "artifacts/research/101_alphas/metrics_101_alphas_ensemble_v0.csv",
       "metrics_period": "full",
-      "tearsheet_pdf": "artifacts/research/101_alphas/alphas101_tearsheet_v0.pdf",
+      "tearsheet_pdf": "artifacts/research/101_alphas/alphas101_tearsheet_v0_full_usd_legacy.pdf",
       "canonical_period": {
         "start": "2023-01-01",
         "end": "2024-12-31"
       },
       "git_tag": "v0.1-101-alphas-stack",
+      "note_md": "docs/research/alphas101_v0_full_usd_legacy_ic_note.md",
       "run_recipe": [
         "# To exactly reproduce this legacy run, do:",
         "#   git checkout v0.1-101-alphas-stack",
@@ -53,7 +54,7 @@
     },
     {
       "id": "alphas101_v1_adv10m_base_concentration",
-      "name": "Alpha 101 V1 ADV>10M – Base vs Growth concentration experiment (2021-11-01+)",
+      "name": "Alpha Ensemble V1 ADV>10M – Base vs Growth concentration experiment (2021-11-01+)",
       "family": "alphas101",
       "version": "v1",
       "status": "experiment",

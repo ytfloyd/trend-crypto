@@ -84,11 +84,15 @@ def compute_metrics_from_returns(
     }
 
 
-def compute_portfolio_metrics(equity_path: Path) -> pd.DataFrame:
-    df = pd.read_csv(equity_path, parse_dates=["ts"])
-    df = df.sort_values("ts")
+def compute_portfolio_metrics(equity_path: Path, turnover_path: Optional[Path] = None) -> pd.DataFrame:
+    df = pd.read_csv(equity_path, parse_dates=["ts"]).sort_values("ts")
+    if turnover_path and turnover_path.exists():
+        _turnover = pd.read_csv(turnover_path, parse_dates=["ts"])
+        _turnover["ts"] = _turnover["ts"].dt.tz_localize(None)
+    # Normalize timestamps to tz-naive for safe comparisons
+    df["ts"] = df["ts"].dt.tz_localize(None)
     if df.empty:
-        raise RuntimeError(f"Ensemble equity is empty: {equity_path}")
+        raise RuntimeError(f"Equity is empty: {equity_path}")
 
     min_ts = df["ts"].min()
     max_ts = df["ts"].max()
@@ -111,68 +115,63 @@ def compute_portfolio_metrics(equity_path: Path) -> pd.DataFrame:
         slice_df = df.loc[mask].copy()
         if slice_df.empty:
             continue
-        metrics = compute_metrics_from_returns(
-            slice_df, ret_col="portfolio_ret", equity_col="portfolio_equity"
-        )
+        metrics = compute_metrics_from_returns(slice_df, ret_col="portfolio_ret", equity_col="portfolio_equity")
         metrics["period"] = name
         metrics["start"] = start_clipped
         metrics["end"] = end_clipped
         rows.append(metrics)
 
-    return pd.DataFrame(rows)[
-        [
-            "period",
-            "start",
-            "end",
-            "n_days",
-            "total_return",
-            "cagr",
-            "vol",
-            "sharpe",
-            "sortino",
-            "calmar",
-            "avg_dd",
-            "hit_ratio",
-            "expectancy",
-            "max_dd",
-        ]
+    cols = [
+        "period",
+        "start",
+        "end",
+        "n_days",
+        "total_return",
+        "cagr",
+        "vol",
+        "sharpe",
+        "sortino",
+        "calmar",
+        "avg_dd",
+        "hit_ratio",
+        "expectancy",
+        "max_dd",
     ]
+    return pd.DataFrame(rows)[cols]
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Metrics for 101 Alphas ensemble."
-    )
+    parser = argparse.ArgumentParser(description="Metrics for kuma_trend v0.")
     parser.add_argument(
         "--equity",
         type=str,
-        default="artifacts/research/101_alphas/ensemble_equity_v0.csv",
-        help="Path to ensemble equity CSV.",
+        default="artifacts/research/kuma_trend/kuma_trend_equity_v0.csv",
+        help="Path to equity CSV.",
+    )
+    parser.add_argument(
+        "--turnover",
+        type=str,
+        default="artifacts/research/kuma_trend/kuma_trend_turnover_v0.csv",
+        help="Turnover CSV (unused in metrics, kept for CLI parity).",
     )
     parser.add_argument(
         "--out",
         type=str,
-        default="artifacts/research/101_alphas/metrics_101_alphas_ensemble_v0.csv",
+        default="artifacts/research/kuma_trend/metrics_kuma_trend_v0.csv",
         help="Output metrics CSV.",
     )
-
     args = parser.parse_args()
+
     equity_path = Path(args.equity)
     if not equity_path.exists():
         raise FileNotFoundError(f"Equity file not found: {equity_path}")
 
-    metrics_df = compute_portfolio_metrics(equity_path)
+    metrics_df = compute_portfolio_metrics(equity_path, Path(args.turnover))
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     metrics_df.to_csv(out_path, index=False)
-    print(f"[alphas101_metrics_v0] Wrote ensemble metrics to {out_path}")
-
-    # Also write explicit V1 remediation metrics filename alongside the main output.
-    v1_path = out_path.parent / "metrics_101_ensemble_filtered_v1.csv"
-    metrics_df.to_csv(v1_path, index=False)
-    print(f"[alphas101_metrics_v0] Wrote V1 metrics to {v1_path}")
+    print(f"[kuma_trend_metrics_v0] Wrote metrics to {out_path}")
 
 
 if __name__ == "__main__":
     main()
-

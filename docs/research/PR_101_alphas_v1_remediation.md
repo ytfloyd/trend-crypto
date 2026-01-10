@@ -1,4 +1,4 @@
-# 101 Alphas – V1 Remediation (ADV>10M, Ghost-Filtered IC, Capacity)
+# Alpha Ensemble – V1 Remediation (ADV>10M, Ghost-Filtered IC, Capacity)
 
 ## Summary
 Adds custom alphas 201–220 to the 101-alphas stack, applies ADV>10M liquidity remediation, ghost-data filtering for IC/decay/bias, standardized two-sided turnover, and refreshed capacity tooling + tear sheet. Both the base USD universe and the ADV>10M V1 stack are recomputed end-to-end.
