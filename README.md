@@ -507,6 +507,19 @@ python scripts/research/alphas101_tearsheet_v0.py \
 
 All research tear sheets use `scripts/research/tearsheet_common_v0.py` for equity loading, BTC benchmark overlay, and BTC vs Strategy summary tables.
 
+### Growth Sleeve v1.5 Universe (Top50 by 30D volume, ADV >= $10M)
+
+Build the daily/4H universe views:
+
+```bash
+python scripts/research/create_usd_universe_top50_adv10m_views_v15.py \
+  --db ../data/coinbase_daily_121025.duckdb
+```
+
+Outputs:
+- Daily: `bars_1d_usd_universe_clean_top50_adv10m`
+- 4H: `bars_4h_usd_universe_clean_top50_adv10m` (if a 4H source exists)
+
 ## Research (kuma_trend)
 
 Tear sheet with strategy note:
