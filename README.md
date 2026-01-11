@@ -364,6 +364,29 @@ python scripts/research/create_usd_universe_adv10m_view.py \
   --out_view bars_1d_usd_universe_clean_adv10m
 ```
 
+## Research (Alpha Ensemble V1.5 Growth Sleeve)
+
+- Build Top50 ADV>10M universe views:
+  ```
+  venv_trend_crypto/bin/python scripts/research/create_usd_universe_top50_adv10m_views_v15.py --db ../data/coinbase_daily_121025.duckdb
+  ```
+- Run Growth Sleeve backtest (daily v0):
+  ```
+  venv_trend_crypto/bin/python scripts/research/run_alpha_ensemble_v15_growth_backtest_v0.py --db ../data/coinbase_daily_121025.duckdb --price_table bars_1d_usd_universe_clean_top50_adv10m --start 2023-01-01 --end 2024-12-31 --out_dir artifacts/research/alpha_ensemble_v15_growth --config_name v0
+  ```
+- Compute metrics (includes Sortino/Calmar/AvgDD/Hit/Expectancy and trade stats):
+  ```
+  venv_trend_crypto/bin/python scripts/research/alpha_ensemble_v15_growth_metrics_v0.py --equity artifacts/research/alpha_ensemble_v15_growth/growth_equity_v0.csv --trades artifacts/research/alpha_ensemble_v15_growth/growth_trades_v0.parquet --out artifacts/research/alpha_ensemble_v15_growth/metrics_growth_v15_v0.csv
+  ```
+- Generate ETH benchmark aligned to growth equity:
+  ```
+  venv_trend_crypto/bin/python scripts/research/benchmark_btc_hold_v0.py --db ../data/coinbase_daily_121025.duckdb --price_table bars_1d_usd_universe_clean_top50_adv10m --symbol ETH-USD --equity_csv artifacts/research/alpha_ensemble_v15_growth/growth_equity_v0.csv --out_csv artifacts/research/alpha_ensemble_v15_growth/benchmark_eth_usd_equity_v0.csv
+  ```
+- Tear sheet (uses tearsheet_common overlays; renders note markdown):
+  ```
+  venv_trend_crypto/bin/python scripts/research/alpha_ensemble_v15_growth_tearsheet_v0.py --research_dir artifacts/research/alpha_ensemble_v15_growth --metrics_csv artifacts/research/alpha_ensemble_v15_growth/metrics_growth_v15_v0.csv --benchmark_equity_csv artifacts/research/alpha_ensemble_v15_growth/benchmark_eth_usd_equity_v0.csv --benchmark_label "ETH-USD Buy & Hold" --strategy_note_md docs/research/alpha_ensemble_v15_growth_overview_v0.md --out_pdf artifacts/research/alpha_ensemble_v15_growth/alpha_ensemble_v15_growth_tearsheet_v0.pdf
+  ```
+
 Compute alphas on ADV>10M:
 
 ```bash
