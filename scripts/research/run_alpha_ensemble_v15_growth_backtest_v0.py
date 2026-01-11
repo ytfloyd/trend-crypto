@@ -128,6 +128,21 @@ def main() -> None:
     if not results["debug_df"].empty:
         print(f"[growth_runner] Wrote debug to {debug_path}")
 
+    # Quick diagnostics to avoid silent zero-trade runs
+    weights = results["weights_df"]
+    gross = weights.groupby("ts")["weight"].sum()
+    debug_df = results["debug_df"]
+    trades_df = results["trades_df"]
+    print("\n[growth_runner] Diagnostics:")
+    print(f"  Days with gross>0: {(gross.abs() > 1e-6).mean():.3f}")
+    if not debug_df.empty:
+        print(f"  Regime_on rate: {debug_df['regime_on'].mean():.3f}")
+        print(f"  Slow_on rate:   {debug_df['slow_on'].mean():.3f}")
+        print(f"  Fast_on rate:   {debug_df['fast_on'].mean():.3f}")
+    print(f"  Entries: {len(trades_df[trades_df['side'].str.contains('ENTRY')]) if not trades_df.empty else 0}")
+    print(f"  Exits:   {len(trades_df[trades_df['side'].str.contains('EXIT')]) if not trades_df.empty else 0}")
+    print(f"  Traded symbols: {trades_df['symbol'].nunique() if not trades_df.empty else 0}")
+
 
 if __name__ == "__main__":
     main()

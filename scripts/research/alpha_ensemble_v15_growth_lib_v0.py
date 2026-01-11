@@ -156,8 +156,12 @@ def _compute_features(panel: pd.DataFrame, cfg: GrowthSleeveConfig) -> pd.DataFr
 
     # ADX / ATR use group-aware helpers (keep a flat index to avoid symbol ambiguity)
     df_for_ind = panel.reset_index()
-    feats["atr"] = calc_atr(df_for_ind, n=cfg.atr_window)
-    feats["adx"] = calc_adx(df_for_ind, n=cfg.adx_window)
+    atr_ser = calc_atr(df_for_ind, n=cfg.atr_window)
+    atr_ser.index = panel.index  # align to multiindex
+    feats["atr"] = atr_ser
+    adx_ser = calc_adx(df_for_ind, n=cfg.adx_window)
+    adx_ser.index = panel.index
+    feats["adx"] = adx_ser
 
     # Per-symbol computations (Ichimoku, Keltner, Bollinger width, DEWMA, PSAR)
     ich_parts = []
