@@ -133,6 +133,7 @@ def main() -> None:
     gross = weights.groupby("ts")["weight"].sum()
     debug_df = results["debug_df"]
     trades_df = results["trades_df"]
+    equity_df = results["equity_df"]
     print("\n[growth_runner] Diagnostics:")
     print(f"  Days with gross>0: {(gross.abs() > 1e-6).mean():.3f}")
     if not debug_df.empty:
@@ -142,6 +143,65 @@ def main() -> None:
     print(f"  Entries: {len(trades_df[trades_df['side'].str.contains('ENTRY')]) if not trades_df.empty else 0}")
     print(f"  Exits:   {len(trades_df[trades_df['side'].str.contains('EXIT')]) if not trades_df.empty else 0}")
     print(f"  Traded symbols: {trades_df['symbol'].nunique() if not trades_df.empty else 0}")
+
+    # Exposure health summary CSV
+    summary = {}
+    if not equity_df.empty:
+        summary["start"] = equity_df["ts"].min()
+        summary["end"] = equity_df["ts"].max()
+        summary["n_days"] = equity_df["ts"].nunique()
+    summary["pct_gross_gt0"] = float((gross.abs() > 1e-6).mean())
+    summary["gross_mean"] = float(gross.mean())
+    summary["gross_median"] = float(gross.median())
+    summary["gross_p10"] = float(gross.quantile(0.10))
+    summary["gross_p90"] = float(gross.quantile(0.90))
+    summary["gross_max"] = float(gross.max())
+
+    active_counts = weights.groupby("ts")["symbol"].nunique()
+    summary["active_mean"] = float(active_counts.mean())
+    summary["active_median"] = float(active_counts.median())
+    summary["active_p90"] = float(active_counts.quantile(0.90))
+    summary["active_max"] = float(active_counts.max())
+
+    if not debug_df.empty:
+        vol_scalar_ts = debug_df.drop_duplicates(subset=["ts"])[["ts", "vol_scalar"]].set_index("ts")["vol_scalar"]
+        summary["scalar_mean"] = float(vol_scalar_ts.mean())
+        summary["scalar_median"] = float(vol_scalar_ts.median())
+        summary["scalar_p10"] = float(vol_scalar_ts.quantile(0.10))
+        summary["scalar_p90"] = float(vol_scalar_ts.quantile(0.90))
+        summary["scalar_max"] = float(vol_scalar_ts.max())
+        summary["scalar_pct_cap"] = float((vol_scalar_ts >= 0.999 * 1.5).mean())
+
+        if "exp_vol_ann" in debug_df.columns:
+            exp_vol_ts = debug_df.drop_duplicates(subset=["ts"])[["ts", "exp_vol_ann"]].set_index("ts")["exp_vol_ann"]
+            summary["exp_vol_mean"] = float(exp_vol_ts.mean())
+            summary["exp_vol_median"] = float(exp_vol_ts.median())
+            summary["exp_vol_p10"] = float(exp_vol_ts.quantile(0.10))
+            summary["exp_vol_p90"] = float(exp_vol_ts.quantile(0.90))
+            summary["exp_vol_max"] = float(exp_vol_ts.max())
+
+        summary["regime_on_rate"] = float(debug_df["regime_on"].mean())
+        summary["slow_on_rate"] = float(debug_df["slow_on"].mean())
+        summary["fast_on_rate"] = float(debug_df["fast_on"].mean())
+
+    summary["entries"] = int(len(trades_df[trades_df["side"].str.contains("ENTRY")])) if not trades_df.empty else 0
+    summary["exits"] = int(len(trades_df[trades_df["side"].str.contains("EXIT")])) if not trades_df.empty else 0
+    summary["traded_symbols"] = int(trades_df["symbol"].nunique()) if not trades_df.empty else 0
+
+    summary_path = out_dir / f"{prefix}_debug_summary_{suffix}.csv"
+    pd.DataFrame([summary]).to_csv(summary_path, index=False)
+    print(f"[growth_runner] Wrote exposure summary to {summary_path}")
+
+    # Realized vol warning vs target
+    if not equity_df.empty:
+        ret = equity_df["portfolio_equity"].pct_change().dropna()
+        realized_vol = ret.std() * (365 ** 0.5) if not ret.empty else 0.0
+        target_vol = GrowthSleeveConfig().target_vol
+        if realized_vol < 0.25 * target_vol and summary["pct_gross_gt0"] > 0.30:
+            print(
+                f"[growth_runner][WARNING] Realized vol {realized_vol:.4f} is <25% of target {target_vol:.4f} "
+                "despite material gross exposure; check sizing/units."
+            )
 
 
 if __name__ == "__main__":

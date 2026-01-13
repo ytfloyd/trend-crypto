@@ -283,18 +283,24 @@ def _apply_cluster_cap(weights: pd.Series, returns_window: pd.DataFrame, cfg: Gr
     return scaled
 
 
-def _apply_vol_scalar(weights: pd.Series, returns_window: pd.DataFrame, cfg: GrowthSleeveConfig) -> Tuple[pd.Series, float]:
+def _apply_vol_scalar(weights: pd.Series, returns_window: pd.DataFrame, cfg: GrowthSleeveConfig) -> Tuple[pd.Series, float, float]:
     """
     Scale weights to target portfolio volatility (capped).
-    Returns scaled weights and scalar applied.
+
+    Returns: (scaled weights, scalar applied, expected_vol_ann)
     """
     active = weights[weights > 0]
     if active.empty or returns_window.empty:
-        return weights, 1.0
+        return weights, 1.0, 0.0
 
     cov = returns_window.cov().loc[active.index, active.index].fillna(0.0)
     if cov.empty:
-        return weights, 1.0
+        return weights, 1.0, 0.0
+
+    # Unit sanity: returns should be decimals (0.01 = 1%). Warn if not.
+    flat_ret = returns_window.stack().dropna()
+    if not flat_ret.empty and flat_ret.abs().median() > 0.5:
+        print("[growth_lib] WARNING: median |return| > 50%; returns may be in percent units. Check data.")
 
     w_vec = active.values
     cov_mat = cov.values
@@ -302,11 +308,11 @@ def _apply_vol_scalar(weights: pd.Series, returns_window: pd.DataFrame, cfg: Gro
     exp_vol_daily = np.sqrt(port_var) if port_var > 0 else 0.0
     exp_vol_ann = exp_vol_daily * np.sqrt(ANN_FACTOR)
     if exp_vol_ann == 0 or not np.isfinite(exp_vol_ann):
-        return weights, 1.0
+        return weights, 1.0, 0.0
 
     scalar = min(cfg.max_scalar, cfg.target_vol / exp_vol_ann)
     scaled = weights * scalar
-    return scaled, scalar
+    return scaled, scalar, exp_vol_ann
 
 
 def run_growth_sleeve_backtest(
@@ -527,7 +533,7 @@ def run_growth_sleeve_backtest(
         # Guardrails: cluster cap and vol targeting
         ret_window = returns_df.loc[:ts].tail(cfg.cov_lookback)
         weights_clustered = _apply_cluster_cap(desired_weights, ret_window, cfg)
-        weights_scaled, scalar_applied = _apply_vol_scalar(weights_clustered, ret_window, cfg)
+        weights_scaled, scalar_applied, exp_vol_ann = _apply_vol_scalar(weights_clustered, ret_window, cfg)
 
         # Hard cap per name and optional renorm to keep gross <= 1
         weights_capped = weights_scaled.clip(upper=cfg.max_name_weight)
@@ -593,6 +599,7 @@ def run_growth_sleeve_backtest(
                     "gap_exit": gap_flags.get(sym, False),
                     "exposure_mult": exposure_map.get(sym, 0.0),
                     "vol_scalar": scalar_applied,
+                    "exp_vol_ann": exp_vol_ann,
                 }
             )
 
