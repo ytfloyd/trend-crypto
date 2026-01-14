@@ -31,13 +31,16 @@ from tearsheet_common_v0 import (  # noqa: E402
     load_strategy_stats_from_metrics,
     plot_drawdown_with_benchmark,
     plot_equity_with_benchmark,
+    resolve_tearsheet_inputs,
+    build_provenance_text,
 )
 
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Alpha Ensemble V1.5 Growth Sleeve tear sheet (daily-only v0).")
-    p.add_argument("--research_dir", required=True, help="Directory containing growth_equity_v0.csv, etc.")
-    p.add_argument("--metrics_csv", required=True, help="Metrics CSV (with period=full row).")
+    p.add_argument("--research_dir", required=False, help="Directory containing growth_equity_v0.csv, etc.")
+    p.add_argument("--equity_csv", required=False, help="Explicit equity CSV path (overrides research_dir discovery).")
+    p.add_argument("--metrics_csv", required=False, help="Metrics CSV (with period=full row).")
     p.add_argument("--benchmark_equity_csv", required=True, help="Benchmark equity CSV (ts,equity), e.g., ETH buy&hold.")
     p.add_argument("--benchmark_label", default="ETH-USD Buy & Hold", help="Label for benchmark table/plots.")
     p.add_argument("--strategy_note_md", required=True, help="Markdown note to render on final pages.")
@@ -79,12 +82,19 @@ def render_note_page(pdf: PdfPages, note_path: Path, title: str) -> None:
 
 def main() -> None:
     args = parse_args()
-    research_dir = Path(args.research_dir)
+    research_dir = Path(args.research_dir) if args.research_dir else None
     out_pdf = Path(args.out_pdf)
     out_pdf.parent.mkdir(parents=True, exist_ok=True)
 
-    strategy_stats = load_strategy_stats_from_metrics(args.metrics_csv)
-    strat_eq = load_strategy_equity(research_dir)
+    eq_resolved, metrics_resolved, manifest_path = resolve_tearsheet_inputs(
+        research_dir=str(research_dir) if research_dir else None,
+        equity_csv=args.equity_csv,
+        metrics_csv=args.metrics_csv,
+        equity_patterns=["growth_equity_*.csv", "growth_equity_v0.csv"],
+        metrics_patterns=["metrics_growth_v15_*.csv", "metrics_growth_v15_v0.csv", "*metrics*.csv"],
+    )
+    strategy_stats = load_strategy_stats_from_metrics(metrics_resolved)
+    strat_eq = load_equity_csv(eq_resolved)
     bench_eq = load_benchmark_equity(args.benchmark_equity_csv, strat_eq.index)
 
     comparison_df = build_benchmark_comparison_table(
@@ -137,6 +147,14 @@ def main() -> None:
 
         # Strategy note
         render_note_page(pdf, Path(args.strategy_note_md), "Strategy Note")
+
+        # Provenance page
+        prov_text = build_provenance_text(eq_resolved, metrics_resolved, manifest_path)
+        fig_p, ax_p = plt.subplots(figsize=(11, 8.5))
+        ax_p.axis("off")
+        ax_p.text(0.02, 0.98, prov_text, ha="left", va="top", fontsize=10)
+        pdf.savefig(fig_p, bbox_inches="tight")
+        plt.close(fig_p)
 
     print(f"[growth_tearsheet] Wrote tear sheet to {out_pdf}")
 
