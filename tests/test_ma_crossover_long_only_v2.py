@@ -1,3 +1,6 @@
+import pytest
+pytest.importorskip("polars")
+
 from datetime import datetime, timedelta, timezone
 
 import polars as pl
