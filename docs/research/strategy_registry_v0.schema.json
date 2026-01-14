@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Strategy Registry v0",
+  "type": "object",
+  "required": ["strategies"],
+  "properties": {
+    "strategies": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/strategy" }
+    }
+  },
+  "definitions": {
+    "strategy": {
+      "type": "object",
+      "required": ["id", "family", "version", "status"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "family": { "type": "string" },
+        "version": { "type": "string" },
+        "status": { "type": "string", "enum": ["canonical", "archived", "experiment", "incubation"] },
+        "universe": { "type": "string" },
+        "equity_csv": { "type": ["string", "null"] },
+        "metrics_csv": { "type": ["string", "null"] },
+        "tearsheet_pdf": { "type": ["string", "null"] },
+        "period": {
+          "type": "object",
+          "required": ["start", "end"],
+          "properties": {
+            "start": { "type": "string" },
+            "end": { "type": "string" }
+          }
+        },
+        "canonical_period": {
+          "type": "object",
+          "required": ["start", "end"],
+          "properties": {
+            "start": { "type": "string" },
+            "end": { "type": "string" }
+          }
+        },
+        "metrics_period": { "type": "string" },
+        "git_tag": { "type": ["string", "null"] },
+        "note_md": { "type": ["string", "null"] },
+        "run_recipe": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "canonical" } } },
+          "then": {
+            "required": ["equity_csv", "metrics_csv", "tearsheet_pdf", "run_recipe"],
+            "anyOf": [
+              {"required": ["period"]},
+              {"required": ["canonical_period"]}
+            ]
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "incubation" } } },
+          "then": {
+            "required": ["equity_csv", "metrics_csv", "tearsheet_pdf", "run_recipe"],
+            "anyOf": [
+              {"required": ["period"]},
+              {"required": ["canonical_period"]}
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

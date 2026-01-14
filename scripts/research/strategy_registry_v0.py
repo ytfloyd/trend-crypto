@@ -5,16 +5,19 @@ import argparse
 import json
 import os
 import subprocess
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+import sys
 
 import pandas as pd
 
 REGISTRY_PATH = "docs/research/strategy_registry_v0.json"
 REPO_ROOT = "/Users/russellfloyd/Dropbox/NRT/nrt_dev/trend_crypto"
+SCHEMA_PATH = "docs/research/strategy_registry_v0.schema.json"
 
 
-def load_registry(path: str = REGISTRY_PATH) -> List[Dict[str, Any]]:
-    with open(path, "r", encoding="utf-8") as f:
+def load_registry(path: Optional[str] = None) -> List[Dict[str, Any]]:
+    use_path = path or REGISTRY_PATH
+    with open(use_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     return data.get("strategies", [])
 
@@ -137,8 +140,72 @@ def cmd_run(args: argparse.Namespace) -> None:
     print("\nDone.")
 
 
+def _load_schema(path: str) -> Optional[dict]:
+    if not os.path.exists(path):
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _validate_status_fields(s: Dict[str, Any]) -> List[str]:
+    status = s.get("status")
+    errs: List[str] = []
+    required_base = ["id", "family", "version", "status"]
+    for f in required_base:
+        if not s.get(f):
+            errs.append(f"missing required field '{f}'")
+    if status == "canonical":
+        needed = ["equity_csv", "metrics_csv", "tearsheet_pdf", "run_recipe"]
+    elif status == "incubation":
+        needed = ["equity_csv", "metrics_csv", "tearsheet_pdf", "run_recipe"]
+    else:
+        needed = []
+    for f in needed:
+        if not s.get(f):
+            errs.append(f"missing {f} (required for status={status})")
+    if status in {"canonical", "incubation"}:
+        rr = s.get("run_recipe")
+        if not isinstance(rr, list) or not all(isinstance(x, str) and x.strip() for x in rr) or len(rr) == 0:
+            errs.append("run_recipe must be a non-empty list of commands")
+        period = s.get("period") or s.get("canonical_period")
+        if not period or not period.get("start") or not period.get("end"):
+            errs.append(f"period.start/end required for status={status}")
+    return errs
+
+
+def cmd_validate(_: argparse.Namespace) -> None:
+    strategies = load_registry()
+    schema = _load_schema(SCHEMA_PATH)
+    errors: List[str] = []
+
+    # Optional jsonschema validation if available
+    if schema:
+        try:
+            import jsonschema
+
+            jsonschema.validate({"strategies": strategies}, schema)
+        except ImportError:
+            print("[registry] jsonschema not installed; skipping schema validation.")
+        except Exception as e:
+            errors.append(f"Schema validation failed: {e}")
+
+    for s in strategies:
+        sid = s.get("id", "<unknown>")
+        errs = _validate_status_fields(s)
+        for e in errs:
+            errors.append(f"{sid}: {e}")
+
+    if errors:
+        print("Registry validation failed:")
+        for e in errors:
+            print(f" - {e}")
+        sys.exit(1)
+    else:
+        print("Registry validation OK.")
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Strategy registry CLI (list/show/run).")
+    parser = argparse.ArgumentParser(description="Strategy registry CLI (list/show/run/validate).")
     sub = parser.add_subparsers(dest="cmd")
 
     sub.add_parser("list", help="List all registered strategies with key metrics.")
@@ -148,6 +215,8 @@ def main() -> None:
 
     p_run = sub.add_parser("run", help="Execute the run_recipe for a strategy.")
     p_run.add_argument("--id", required=True, help="Strategy id from registry.")
+
+    sub.add_parser("validate", help="Validate registry against schema and status rules.")
 
     args = parser.parse_args()
     if args.cmd is None:
@@ -159,6 +228,8 @@ def main() -> None:
         cmd_show(args)
     elif args.cmd == "run":
         cmd_run(args)
+    elif args.cmd == "validate":
+        cmd_validate(args)
     else:
         parser.print_help()
 
