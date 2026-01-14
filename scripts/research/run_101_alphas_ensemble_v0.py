@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from pathlib import Path
 from typing import List
 
 import duckdb
 import numpy as np
 import pandas as pd
+from run_manifest_v0 import build_base_manifest, fingerprint_file, write_run_manifest
 
 from alphas101_lib_v0 import cs_rank
 
@@ -528,6 +530,31 @@ def main() -> None:
     print(
         f"[run_101_alphas_ensemble_v0] Wrote turnover with {len(turnover_df)} rows to {turnover_path}"
     )
+
+    # Run manifest
+    manifest = build_base_manifest(
+        strategy_id="alphas101_ensemble",
+        argv=sys.argv,
+        repo_root=Path(__file__).resolve().parents[2],
+    )
+    manifest.update(
+        {
+            "config": vars(args),
+            "data_sources": {
+                "duckdb": fingerprint_file(db_path),
+                "price_table": args.price_table,
+            },
+            "universe": args.price_table,
+            "artifacts_written": {
+                "weights_parquet": str(weights_out),
+                "equity_csv": str(equity_path),
+                "turnover_csv": str(turnover_path),
+            },
+        }
+    )
+    manifest_path = out_dir / f"ensemble_run_manifest_{args.output_suffix}.json"
+    write_run_manifest(manifest_path, manifest)
+    print(f"[run_101_alphas_ensemble_v0] Wrote run manifest to {manifest_path}")
 
 
 if __name__ == "__main__":

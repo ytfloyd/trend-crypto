@@ -11,11 +11,13 @@ and writes standard artifacts (equity, weights, turnover, trades, debug).
 import argparse
 from pathlib import Path
 from typing import Any, Dict
+import sys
 
 import duckdb
 import pandas as pd
 
 from alpha_ensemble_v15_growth_lib_v0 import GrowthSleeveConfig, run_growth_sleeve_backtest
+from run_manifest_v0 import build_base_manifest, fingerprint_file, write_run_manifest
 
 
 def parse_args() -> argparse.Namespace:
@@ -202,6 +204,30 @@ def main() -> None:
                 f"[growth_runner][WARNING] Realized vol {realized_vol:.4f} is <25% of target {target_vol:.4f} "
                 "despite material gross exposure; check sizing/units."
             )
+
+    # Write run manifest
+    manifest = build_base_manifest(strategy_id="alpha_ensemble_v15_growth_sleeve", argv=sys.argv, repo_root=Path(__file__).resolve().parents[2])
+    manifest.update(
+        {
+            "config": cfg.__dict__,
+            "data_sources": {
+                "duckdb": fingerprint_file(db_path),
+                "price_table": price_table,
+            },
+            "universe": price_table,
+            "artifacts_written": {
+                "equity_csv": str(equity_path),
+                "weights_parquet": str(weights_path),
+                "turnover_csv": str(turnover_path),
+                "trades_parquet": str(trades_path),
+                "debug_parquet": str(debug_path),
+                "debug_summary_csv": str(summary_path),
+            },
+        }
+    )
+    manifest_path = out_dir / f"{prefix}_run_manifest_{suffix}.json"
+    write_run_manifest(manifest_path, manifest)
+    print(f"[growth_runner] Wrote run manifest to {manifest_path}")
 
 
 if __name__ == "__main__":
