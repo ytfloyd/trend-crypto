@@ -54,3 +54,11 @@ def test_update_run_manifest(tmp_path: Path):
     loaded = load_run_manifest(out)
     assert loaded["a"] == 1
     assert loaded["b"] == 2
+
+
+def test_update_creates_when_missing(tmp_path: Path):
+    out = tmp_path / "missing_manifest.json"
+    # Should create new manifest when missing
+    update_run_manifest(out, {"foo": "bar"})
+    loaded = load_run_manifest(out)
+    assert loaded["foo"] == "bar"
