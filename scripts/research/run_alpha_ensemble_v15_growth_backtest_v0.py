@@ -9,15 +9,21 @@ and writes standard artifacts (equity, weights, turnover, trades, debug).
 """
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Any, Dict
-import sys
 
 import duckdb
 import pandas as pd
 
 from alpha_ensemble_v15_growth_lib_v0 import GrowthSleeveConfig, run_growth_sleeve_backtest
-from run_manifest_v0 import build_base_manifest, fingerprint_file, write_run_manifest, hash_config_blob
+from run_manifest_v0 import (
+    build_base_manifest,
+    fingerprint_file,
+    write_run_manifest,
+    hash_config_blob,
+    update_run_manifest,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -46,6 +52,21 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--max_name_weight", type=float, default=0.08)
     p.add_argument("--gap_atr_mult", type=float, default=1.0)
     p.add_argument("--slippage_bps", type=float, default=25.0)
+    p.add_argument(
+        "--allow_percent_returns_for_debug",
+        action="store_true",
+        help="Allow percent-unit returns without raising (for debug only). Default: False.",
+    )
+    p.add_argument(
+        "--allow_low_exposure",
+        action="store_true",
+        help="Allow very low gross exposure without raising (warn only). Default: False.",
+    )
+    p.add_argument(
+        "--fail_on_low_exposure",
+        action="store_true",
+        help="If set, low exposure triggers a hard failure.",
+    )
 
     return p.parse_args()
 
@@ -84,8 +105,38 @@ def build_config_from_args(args: argparse.Namespace) -> GrowthSleeveConfig:
         max_name_weight=args.max_name_weight,
         gap_atr_mult=args.gap_atr_mult,
         gap_slippage=slippage,
+        allow_percent_returns_for_debug=args.allow_percent_returns_for_debug,
+        allow_low_exposure=args.allow_low_exposure,
+        fail_on_low_exposure=args.fail_on_low_exposure,
     )
     return GrowthSleeveConfig(**cfg_overrides)
+
+
+def _write_diagnostics(diag_rows: list[dict], path: Path) -> pd.DataFrame:
+    df = pd.DataFrame(diag_rows)
+    required = {
+        "date",
+        "universe_n",
+        "eligible_n",
+        "active_n",
+        "gross_exposure",
+        "net_exposure",
+        "vol_scalar",
+        "expected_vol_ann",
+        "target_vol",
+        "max_scalar",
+        "pre_cluster_gross",
+        "post_cluster_gross",
+        "cluster_scale",
+        "n_capped_single_name",
+        "n_capped_cluster",
+        "turnover",
+    }
+    missing = required - set(df.columns)
+    if missing:
+        raise RuntimeError(f"Diagnostics missing required columns: {missing}")
+    df.to_csv(path, index=False)
+    return df
 
 
 def main() -> None:
@@ -146,45 +197,94 @@ def main() -> None:
     print(f"  Exits:   {len(trades_df[trades_df['side'].str.contains('EXIT')]) if not trades_df.empty else 0}")
     print(f"  Traded symbols: {trades_df['symbol'].nunique() if not trades_df.empty else 0}")
 
-    # Exposure health summary CSV
+    # Diagnostics per day
+    diag_rows = []
+    for ts in equity_df["ts"]:
+        w_day = weights[weights["ts"] == ts]
+        gross_exposure = float(w_day["weight"].sum())
+        net_exposure = gross_exposure
+        active_n = int((w_day["weight"] > 0).sum())
+        universe_n = int(w_day["symbol"].nunique())
+        turnover_day = float(equity_df.loc[equity_df["ts"] == ts, "turnover"].iloc[0]) if "turnover" in equity_df else None
+        dbg_day = debug_df[debug_df["ts"] == ts] if not debug_df.empty else pd.DataFrame()
+        vol_scalar = float(dbg_day["vol_scalar"].dropna().iloc[0]) if not dbg_day.empty and "vol_scalar" in dbg_day else None
+        exp_vol_ann = float(dbg_day["exp_vol_ann"].dropna().iloc[0]) if not dbg_day.empty and "exp_vol_ann" in dbg_day else None
+        pre_cluster_gross = float(dbg_day["pre_cluster_gross"].dropna().iloc[0]) if not dbg_day.empty and "pre_cluster_gross" in dbg_day else None
+        post_cluster_gross = float(dbg_day["post_cluster_gross"].dropna().iloc[0]) if not dbg_day.empty and "post_cluster_gross" in dbg_day else None
+        cluster_scale = float(dbg_day["cluster_scale"].dropna().iloc[0]) if not dbg_day.empty and "cluster_scale" in dbg_day else None
+        n_capped_single = int(dbg_day["n_capped_single"].dropna().iloc[0]) if not dbg_day.empty and "n_capped_single" in dbg_day else 0
+        n_capped_cluster = int(dbg_day["n_capped_cluster"].dropna().iloc[0]) if not dbg_day.empty and "n_capped_cluster" in dbg_day else 0
+        regime_on_rate = float(dbg_day["regime_on"].mean()) if not dbg_day.empty and "regime_on" in dbg_day else None
+        slow_on_rate = float(dbg_day["slow_on"].mean()) if not dbg_day.empty and "slow_on" in dbg_day else None
+        fast_on_rate = float(dbg_day["fast_on"].mean()) if not dbg_day.empty and "fast_on" in dbg_day else None
+        diag_rows.append(
+            {
+                "date": ts,
+                "universe_n": universe_n,
+                "eligible_n": universe_n,
+                "active_n": active_n,
+                "gross_exposure": gross_exposure,
+                "net_exposure": net_exposure,
+                "turnover": turnover_day,
+                "vol_scalar": vol_scalar,
+                "expected_vol_ann": exp_vol_ann,
+                "target_vol": cfg.target_vol,
+                "max_scalar": cfg.max_scalar,
+                "pre_cluster_gross": pre_cluster_gross,
+                "post_cluster_gross": post_cluster_gross,
+                "cluster_scale": cluster_scale,
+                "n_capped_single_name": n_capped_single,
+                "n_capped_cluster": n_capped_cluster,
+                "regime_on_rate": regime_on_rate,
+                "slow_on_rate": slow_on_rate,
+                "fast_on_rate": fast_on_rate,
+            }
+        )
+
+    diagnostics_path = out_dir / f"{prefix}_diagnostics_{suffix}.csv"
+    diag_df = _write_diagnostics(diag_rows, diagnostics_path)
+    print(f"[growth_runner] Wrote diagnostics to {diagnostics_path}")
+
+    # Exposure health summary
     summary = {}
     if not equity_df.empty:
         summary["start"] = equity_df["ts"].min()
         summary["end"] = equity_df["ts"].max()
         summary["n_days"] = equity_df["ts"].nunique()
     summary["pct_gross_gt0"] = float((gross.abs() > 1e-6).mean())
-    summary["gross_mean"] = float(gross.mean())
-    summary["gross_median"] = float(gross.median())
-    summary["gross_p10"] = float(gross.quantile(0.10))
-    summary["gross_p90"] = float(gross.quantile(0.90))
-    summary["gross_max"] = float(gross.max())
+    summary["gross_mean"] = float(diag_df["gross_exposure"].mean())
+    summary["gross_median"] = float(diag_df["gross_exposure"].median())
+    summary["gross_p10"] = float(diag_df["gross_exposure"].quantile(0.10))
+    summary["gross_p90"] = float(diag_df["gross_exposure"].quantile(0.90))
+    summary["gross_max"] = float(diag_df["gross_exposure"].max())
 
-    active_counts = weights.groupby("ts")["symbol"].nunique()
-    summary["active_mean"] = float(active_counts.mean())
-    summary["active_median"] = float(active_counts.median())
-    summary["active_p90"] = float(active_counts.quantile(0.90))
-    summary["active_max"] = float(active_counts.max())
+    summary["active_mean"] = float(diag_df["active_n"].mean())
+    summary["active_median"] = float(diag_df["active_n"].median())
+    summary["active_p90"] = float(diag_df["active_n"].quantile(0.90))
+    summary["active_max"] = float(diag_df["active_n"].max())
 
     if not debug_df.empty:
-        vol_scalar_ts = debug_df.drop_duplicates(subset=["ts"])[["ts", "vol_scalar"]].set_index("ts")["vol_scalar"]
+        vol_scalar_ts = diag_df["vol_scalar"]
         summary["scalar_mean"] = float(vol_scalar_ts.mean())
         summary["scalar_median"] = float(vol_scalar_ts.median())
         summary["scalar_p10"] = float(vol_scalar_ts.quantile(0.10))
         summary["scalar_p90"] = float(vol_scalar_ts.quantile(0.90))
         summary["scalar_max"] = float(vol_scalar_ts.max())
-        summary["scalar_pct_cap"] = float((vol_scalar_ts >= 0.999 * 1.5).mean())
+        summary["scalar_pct_cap"] = float((vol_scalar_ts >= 0.999 * cfg.max_scalar).mean())
 
-        if "exp_vol_ann" in debug_df.columns:
-            exp_vol_ts = debug_df.drop_duplicates(subset=["ts"])[["ts", "exp_vol_ann"]].set_index("ts")["exp_vol_ann"]
-            summary["exp_vol_mean"] = float(exp_vol_ts.mean())
-            summary["exp_vol_median"] = float(exp_vol_ts.median())
-            summary["exp_vol_p10"] = float(exp_vol_ts.quantile(0.10))
-            summary["exp_vol_p90"] = float(exp_vol_ts.quantile(0.90))
-            summary["exp_vol_max"] = float(exp_vol_ts.max())
+        exp_vol_ts = diag_df["expected_vol_ann"]
+        summary["exp_vol_mean"] = float(exp_vol_ts.mean())
+        summary["exp_vol_median"] = float(exp_vol_ts.median())
+        summary["exp_vol_p10"] = float(exp_vol_ts.quantile(0.10))
+        summary["exp_vol_p90"] = float(exp_vol_ts.quantile(0.90))
+        summary["exp_vol_max"] = float(exp_vol_ts.max())
 
-        summary["regime_on_rate"] = float(debug_df["regime_on"].mean())
-        summary["slow_on_rate"] = float(debug_df["slow_on"].mean())
-        summary["fast_on_rate"] = float(debug_df["fast_on"].mean())
+        if "regime_on_rate" in diag_df:
+            summary["regime_on_rate"] = float(diag_df["regime_on_rate"].mean())
+        if "slow_on_rate" in diag_df:
+            summary["slow_on_rate"] = float(diag_df["slow_on_rate"].mean())
+        if "fast_on_rate" in diag_df:
+            summary["fast_on_rate"] = float(diag_df["fast_on_rate"].mean())
 
     summary["entries"] = int(len(trades_df[trades_df["side"].str.contains("ENTRY")])) if not trades_df.empty else 0
     summary["exits"] = int(len(trades_df[trades_df["side"].str.contains("EXIT")])) if not trades_df.empty else 0
@@ -198,12 +298,23 @@ def main() -> None:
     if not equity_df.empty:
         ret = equity_df["portfolio_equity"].pct_change().dropna()
         realized_vol = ret.std() * (365 ** 0.5) if not ret.empty else 0.0
-        target_vol = GrowthSleeveConfig().target_vol
+        target_vol = cfg.target_vol
         if realized_vol < 0.25 * target_vol and summary["pct_gross_gt0"] > 0.30:
             print(
                 f"[growth_runner][WARNING] Realized vol {realized_vol:.4f} is <25% of target {target_vol:.4f} "
                 "despite material gross exposure; check sizing/units."
             )
+
+    # Exposure health guardrail
+    gross_mean = summary.get("gross_mean", 0.0)
+    if gross_mean < 0.02:
+        msg = f"[growth_runner][ERROR] Gross exposure mean {gross_mean:.4f} is near zero; see {diagnostics_path}"
+        if cfg.fail_on_low_exposure or not cfg.allow_low_exposure:
+            raise RuntimeError(msg)
+        else:
+            print(msg)
+    elif gross_mean < 0.15:
+        print(f"[growth_runner][WARNING] Gross exposure mean {gross_mean:.4f} is low; see {diagnostics_path}")
 
     # Write run manifest
     manifest = build_base_manifest(strategy_id="alpha_ensemble_v15_growth_sleeve", argv=sys.argv, repo_root=Path(__file__).resolve().parents[2])
@@ -223,6 +334,7 @@ def main() -> None:
                 "trades_parquet": str(trades_path),
                 "debug_parquet": str(debug_path),
                 "debug_summary_csv": str(summary_path),
+                "diagnostics_csv": str(diagnostics_path),
             },
         }
     )
