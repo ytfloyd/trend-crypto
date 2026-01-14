@@ -30,6 +30,7 @@ from tearsheet_common_v0 import (
     build_benchmark_comparison_table,
     load_strategy_stats_from_metrics,
 )
+from run_manifest_v0 import update_run_manifest
 
 
 def parse_args() -> argparse.Namespace:
@@ -401,6 +402,8 @@ def make_tearsheet(
             add_strategy_note_pages(pdf, strategy_note_md, title="Strategy Description – kuma_trend")
 
     print(f"[kuma_trend_tearsheet_v0] Wrote tear sheet to {out_pdf}")
+    manifest_path = Path(args.research_dir) / "run_manifest.json"
+    update_run_manifest(manifest_path, {"artifacts_written": {"tearsheet_pdf": str(out_pdf)}})
 
 
 def main() -> None:

@@ -8,6 +8,7 @@ Provides:
 - get_git_info(): branch/SHA (graceful if git not available)
 - fingerprint_file(path): existence, size, mtime, optional sha256
 - write_run_manifest(out_path, manifest): atomic-ish JSON writer
+- build_base_manifest(): consistent base keys
 """
 
 import hashlib
@@ -35,6 +36,7 @@ def get_git_info(repo_root: Optional[Path] = None) -> dict:
         info["git_branch"] = branch
         info["git_sha"] = sha
     except Exception:
+        # git not available (e.g., zipped tree); leave as None
         pass
     return info
 
@@ -59,6 +61,12 @@ def fingerprint_file(path: str | Path, with_hash: bool = False) -> dict:
     return fp
 
 
+def hash_config_blob(obj: dict) -> str:
+    """Stable hash of a JSON-serializable config dict."""
+    blob = json.dumps(obj, sort_keys=True, default=str).encode()
+    return hashlib.sha256(blob).hexdigest()
+
+
 def write_run_manifest(out_path: str | Path, manifest: dict) -> Path:
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -69,14 +77,41 @@ def write_run_manifest(out_path: str | Path, manifest: dict) -> Path:
     return out_path
 
 
+def load_run_manifest(path: str | Path) -> Optional[dict]:
+    p = Path(path)
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text())
+    except Exception:
+        return None
+
+
+def update_run_manifest(path: str | Path, patch: dict) -> Optional[Path]:
+    """
+    Best-effort manifest patcher: loads if present, merges shallowly, writes back.
+    """
+    base = load_run_manifest(path) or {}
+    base.update(patch)
+    try:
+        return write_run_manifest(path, base)
+    except Exception:
+        return None
+
+
 def build_base_manifest(strategy_id: str, argv: list[str], repo_root: Optional[Path] = None) -> dict:
+    ts = int(time.time())
     base = {
         "strategy_id": strategy_id,
-        "timestamp_utc": int(time.time()),
+        "timestamp_utc": ts,
         "command": " ".join(argv),
     }
     base.update(get_git_info(repo_root))
+    # run_id uses ts + short sha if available
+    sha = base.get("git_sha")
+    short_sha = sha[:8] if sha else "nogit"
+    base["run_id"] = f"{ts}-{short_sha}"
     return base
 
 
-__all__ = ["get_git_info", "fingerprint_file", "write_run_manifest", "build_base_manifest"]
+__all__ = ["get_git_info", "fingerprint_file", "write_run_manifest", "build_base_manifest", "hash_config_blob", "load_run_manifest", "update_run_manifest"]

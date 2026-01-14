@@ -10,7 +10,7 @@ from typing import List
 import duckdb
 import numpy as np
 import pandas as pd
-from run_manifest_v0 import build_base_manifest, fingerprint_file, write_run_manifest
+from run_manifest_v0 import build_base_manifest, fingerprint_file, write_run_manifest, hash_config_blob
 
 from alphas101_lib_v0 import cs_rank
 
@@ -540,6 +540,7 @@ def main() -> None:
     manifest.update(
         {
             "config": vars(args),
+            "config_hash": hash_config_blob(vars(args)),
             "data_sources": {
                 "duckdb": fingerprint_file(db_path),
                 "price_table": args.price_table,

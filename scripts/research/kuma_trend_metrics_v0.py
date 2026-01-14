@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
+from run_manifest_v0 import update_run_manifest
 
 ANN_FACTOR = 365.0
 
@@ -171,6 +172,16 @@ def main() -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     metrics_df.to_csv(out_path, index=False)
     print(f"[kuma_trend_metrics_v0] Wrote metrics to {out_path}")
+
+    manifest_path = equity_path.parent / "run_manifest.json"
+    update_run_manifest(
+        manifest_path,
+        {
+            "artifacts_written": {
+                "metrics_csv": str(out_path),
+            }
+        },
+    )
 
 
 if __name__ == "__main__":

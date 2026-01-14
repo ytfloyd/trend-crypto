@@ -17,7 +17,7 @@ import duckdb
 import pandas as pd
 
 from alpha_ensemble_v15_growth_lib_v0 import GrowthSleeveConfig, run_growth_sleeve_backtest
-from run_manifest_v0 import build_base_manifest, fingerprint_file, write_run_manifest
+from run_manifest_v0 import build_base_manifest, fingerprint_file, write_run_manifest, hash_config_blob
 
 
 def parse_args() -> argparse.Namespace:
@@ -210,6 +210,7 @@ def main() -> None:
     manifest.update(
         {
             "config": cfg.__dict__,
+            "config_hash": hash_config_blob(cfg.__dict__),
             "data_sources": {
                 "duckdb": fingerprint_file(db_path),
                 "price_table": price_table,
