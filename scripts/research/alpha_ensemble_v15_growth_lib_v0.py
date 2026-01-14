@@ -83,6 +83,9 @@ class GrowthSleeveConfig:
     cov_lookback: int = 30
     target_vol: float = 0.20  # annualized
     max_scalar: float = 1.5
+    allow_percent_returns_for_debug: bool = False
+    allow_low_exposure: bool = True
+    fail_on_low_exposure: bool = False
 
 
 def _to_panel(bars_df: pd.DataFrame) -> pd.DataFrame:
@@ -299,8 +302,14 @@ def _apply_vol_scalar(weights: pd.Series, returns_window: pd.DataFrame, cfg: Gro
 
     # Unit sanity: returns should be decimals (0.01 = 1%). Warn if not.
     flat_ret = returns_window.stack().dropna()
-    if not flat_ret.empty and flat_ret.abs().median() > 0.5:
-        print("[growth_lib] WARNING: median |return| > 50%; returns may be in percent units. Check data.")
+    if not flat_ret.empty:
+        med_abs = float(np.nanmedian(np.abs(flat_ret)))
+        if med_abs > 0.5 and flat_ret.shape[0] >= 20 and not cfg.allow_percent_returns_for_debug:
+            raise ValueError(
+                "Return units appear to be in percent/bps (median |r|>50%). "
+                "Expected decimal returns (0.01=1%). "
+                "Fix return construction or run with allow_percent_returns_for_debug=True for debugging only."
+            )
 
     w_vec = active.values
     cov_mat = cov.values
@@ -534,6 +543,9 @@ def run_growth_sleeve_backtest(
         ret_window = returns_df.loc[:ts].tail(cfg.cov_lookback)
         weights_clustered = _apply_cluster_cap(desired_weights, ret_window, cfg)
         weights_scaled, scalar_applied, exp_vol_ann = _apply_vol_scalar(weights_clustered, ret_window, cfg)
+        gross_pre_cluster = float(desired_weights.sum())
+        gross_post_cluster = float(weights_clustered.sum())
+        cluster_scale = gross_post_cluster / gross_pre_cluster if gross_pre_cluster > 0 else 1.0
 
         # Hard cap per name and optional renorm to keep gross <= 1
         weights_capped = weights_scaled.clip(upper=cfg.max_name_weight)
@@ -542,6 +554,8 @@ def run_growth_sleeve_backtest(
             weights_capped *= 1.0 / gross_after_cap
 
         turnover = 0.5 * float(np.abs(weights_capped - weights_prev).sum())
+        n_capped_single = int((weights_scaled > cfg.max_name_weight).sum())
+        n_capped_cluster = int(cluster_scale < 0.999)
 
         # Update state for entries
         for sym in symbols:
@@ -600,6 +614,11 @@ def run_growth_sleeve_backtest(
                     "exposure_mult": exposure_map.get(sym, 0.0),
                     "vol_scalar": scalar_applied,
                     "exp_vol_ann": exp_vol_ann,
+                    "pre_cluster_gross": gross_pre_cluster,
+                    "post_cluster_gross": gross_post_cluster,
+                    "cluster_scale": cluster_scale,
+                    "n_capped_single": n_capped_single,
+                    "n_capped_cluster": n_capped_cluster,
                 }
             )
 
