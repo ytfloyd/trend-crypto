@@ -29,6 +29,8 @@ from tearsheet_common_v0 import (
     add_benchmark_summary_table,
     build_benchmark_comparison_table,
     load_strategy_stats_from_metrics,
+    resolve_tearsheet_inputs,
+    build_provenance_text,
 )
 from run_manifest_v0 import update_run_manifest
 
@@ -40,6 +42,18 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="artifacts/research/kuma_trend",
         help="Root directory containing kuma_trend artifacts.",
+    )
+    p.add_argument(
+        "--equity_csv",
+        type=str,
+        default=None,
+        help="Explicit path to equity CSV (overrides research_dir discovery).",
+    )
+    p.add_argument(
+        "--metrics_csv",
+        type=str,
+        default=None,
+        help="Explicit path to metrics CSV (overrides research_dir discovery).",
     )
     p.add_argument(
         "--out_pdf",
@@ -147,16 +161,24 @@ def add_strategy_note_pages(pdf: PdfPages, md_path: str, title: str = "Strategy 
 def make_tearsheet(
     research_dir: Path,
     out_pdf: Path,
+    equity_csv: Optional[str] = None,
+    metrics_csv: Optional[str] = None,
     strategy_note_md: Optional[str] = None,
     benchmark_df: Optional[pd.DataFrame] = None,
     benchmark_label: str = "BTC-USD buy-and-hold",
     benchmark_path: Optional[str] = None,
-    metrics_csv: Optional[str] = None,
 ) -> None:
-    equity_path = research_dir / "kuma_trend_equity_v0.csv"
+    eq_resolved, metrics_resolved, manifest_path = resolve_tearsheet_inputs(
+        research_dir=str(research_dir) if (equity_csv is None and metrics_csv is None) else None,
+        equity_csv=equity_csv,
+        metrics_csv=metrics_csv,
+        equity_patterns=["kuma_trend_equity_*.csv", "kuma_trend_equity_v0.csv"],
+        metrics_patterns=["metrics_kuma_trend_*.csv", "metrics_kuma_trend_v0.csv"],
+    )
+    equity_path = Path(eq_resolved)
+    metrics_path = Path(metrics_resolved)
     turnover_path = research_dir / "kuma_trend_turnover_v0.csv"
     weights_path = research_dir / "kuma_trend_weights_v0.parquet"
-    metrics_path = research_dir / "metrics_kuma_trend_v0.csv"
     positions_path = research_dir / "kuma_trend_positions_v0.parquet"
 
     equity = _load_csv(equity_path, parse_dates=["ts"]).sort_values("ts")
@@ -400,6 +422,14 @@ def make_tearsheet(
         # Page 7+: Strategy description (optional)
         if strategy_note_md:
             add_strategy_note_pages(pdf, strategy_note_md, title="Strategy Description – kuma_trend")
+
+        # Provenance page
+        prov_text = build_provenance_text(str(equity_path), str(metrics_path), manifest_path)
+        fig_p, ax_p = plt.subplots(figsize=(11, 8.5))
+        ax_p.axis("off")
+        ax_p.text(0.02, 0.98, prov_text, ha="left", va="top", fontsize=10)
+        pdf.savefig(fig_p, bbox_inches="tight")
+        plt.close(fig_p)
 
     print(f"[kuma_trend_tearsheet_v0] Wrote tear sheet to {out_pdf}")
     manifest_path = Path(args.research_dir) / "run_manifest.json"

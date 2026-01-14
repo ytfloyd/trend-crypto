@@ -53,6 +53,8 @@ from tearsheet_common_v0 import (
     add_benchmark_summary_table,
     build_benchmark_comparison_table,
     load_strategy_stats_from_metrics,
+    resolve_tearsheet_inputs,
+    build_provenance_text,
 )
 
 
@@ -278,9 +280,19 @@ def make_tearsheet(
     benchmark_label: str = "BTC-USD buy-and-hold",
     benchmark_path: Optional[str] = None,
 ) -> None:
-    # Resolve paths (with sensible defaults)
+    # Resolve equity/metrics strictly
+    eq_resolved, metrics_resolved, manifest_path = resolve_tearsheet_inputs(
+        research_dir=research_dir if (equity_path is None and base_metrics_path is None) else None,
+        equity_csv=equity_path,
+        metrics_csv=base_metrics_path,
+        equity_patterns=["ensemble_equity_*.csv", "ensemble_equity_v0.csv"],
+        metrics_patterns=["metrics_101_ensemble_filtered_v1.csv", "metrics_101_alphas_ensemble_v0.csv", "*metrics*.csv"],
+    )
+    equity_path = eq_resolved
+    base_metrics_path = metrics_resolved
+
+    # Resolve remaining defaults
     rd = research_dir
-    equity_path = equity_path or os.path.join(rd, "ensemble_equity_v0.csv")
     turnover_path = turnover_path or os.path.join(rd, "ensemble_turnover_v0.csv")
 
     if base_metrics_path is None:
@@ -734,6 +746,14 @@ def make_tearsheet(
                 note_header = "Alpha Ensemble – ADV>10M V1 (IC Summary)"
 
             add_strategy_note_pages(pdf, strategy_note_md, title=note_header, metrics_df=base_metrics)
+
+        # Provenance page
+        prov_text = build_provenance_text(equity_path, base_metrics_path, manifest_path)
+        fig_p, ax_p = plt.subplots(figsize=(11, 8.5))
+        ax_p.axis("off")
+        ax_p.text(0.02, 0.98, prov_text, ha="left", va="top", fontsize=10)
+        pdf.savefig(fig_p, bbox_inches="tight")
+        plt.close(fig_p)
 
 
 def main() -> None:

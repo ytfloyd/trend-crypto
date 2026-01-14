@@ -13,6 +13,9 @@ from __future__ import annotations
 
 import os
 from typing import Dict, Optional, Tuple, List
+from pathlib import Path
+import glob
+import json
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -20,6 +23,74 @@ import pandas as pd
 
 
 ANN_FACTOR = 365.0
+
+
+def resolve_tearsheet_inputs(
+    research_dir: Optional[str] = None,
+    equity_csv: Optional[str] = None,
+    metrics_csv: Optional[str] = None,
+    equity_patterns: Optional[List[str]] = None,
+    metrics_patterns: Optional[List[str]] = None,
+) -> Tuple[str, str, Optional[str]]:
+    """
+    Resolve equity/metrics (and optional manifest) with strict single-choice semantics.
+    - If explicit paths are provided, validate and return them.
+    - Else, search research_dir with patterns and require exactly one candidate each.
+    """
+    equity_patterns = equity_patterns or ["*equity*.csv"]
+    metrics_patterns = metrics_patterns or ["*metrics*.csv"]
+
+    def _validate_one(path: str) -> str:
+        p = Path(path)
+        if not p.exists():
+            raise FileNotFoundError(f"Path not found: {p}")
+        return str(p)
+
+    if equity_csv and metrics_csv:
+        return _validate_one(equity_csv), _validate_one(metrics_csv), None
+
+    if not research_dir:
+        raise ValueError("Must provide either explicit equity_csv + metrics_csv or a research_dir.")
+
+    rd = Path(research_dir)
+    if not rd.exists():
+        raise FileNotFoundError(f"research_dir not found: {rd}")
+
+    def _find_one(patterns: List[str], label: str) -> str:
+        candidates: List[str] = []
+        for pat in patterns:
+            candidates.extend([str(Path(p)) for p in glob.glob(str(rd / pat))])
+        uniq = sorted(set(candidates))
+        if len(uniq) != 1:
+            raise ValueError(f"Expected exactly 1 {label} in {rd}, found {len(uniq)}: {uniq}")
+        return uniq[0]
+
+    eq = _find_one(equity_patterns, "equity CSV")
+    met = _find_one(metrics_patterns, "metrics CSV")
+    manifest = rd / "run_manifest.json"
+    manifest_path = str(manifest) if manifest.exists() else None
+    return eq, met, manifest_path
+
+
+def build_provenance_text(equity_csv: str, metrics_csv: str, manifest_path: Optional[str] = None) -> str:
+    lines = [
+        "Provenance",
+        f"equity_csv: {equity_csv}",
+        f"metrics_csv: {metrics_csv}",
+    ]
+    if manifest_path and Path(manifest_path).exists():
+        try:
+            m = json.loads(Path(manifest_path).read_text())
+            lines.append(f"manifest: {manifest_path}")
+            for k in ["strategy_id", "git_branch", "git_sha", "timestamp_utc", "config_hash"]:
+                if k in m:
+                    lines.append(f"{k}: {m[k]}")
+            ds = m.get("data_sources", {})
+            if "duckdb" in ds:
+                lines.append(f"duckdb: {ds['duckdb']}")
+        except Exception:
+            lines.append(f"manifest: {manifest_path} (unreadable)")
+    return "\n".join(lines)
 
 
 def load_equity_csv(path: str, ts_col: str = "ts", equity_col: str = "portfolio_equity") -> pd.Series:
