@@ -1,4 +1,4 @@
-# kuma_trend v0 (archived research)
+# kuma_trend v0 (canonical baseline; tag-pinned)
 
 Strategy ID in registry: `kuma_trend_v0`  
 See `scripts/research/strategy_registry_v0.py show --id kuma_trend_v0` for the canonical pipeline and metrics source.
@@ -9,7 +9,7 @@ Summary (existing research snapshot):
 - Sizing: inverse-vol(20) weights, 5% cash buffer; idle cash earns ~4% annualized.
 - Universe: expanded Coinbase USD list (BTC, ETH, SOL, SUI, BCH, plus broader set); view `bars_1d_usd_universe_clean_adv10m`.
 - Artifacts: `artifacts/research/kuma_trend/kuma_trend_equity_v0.csv`, `.../metrics_kuma_trend_v0.csv`, `.../kuma_trend_tearsheet_v0.pdf`.
-- Tag: `v0.3-kuma-trend-expanded-universe` captures this snapshot; not slated for deployment in current form.
+- Tag: `v0.3-kuma-trend-expanded-universe` captures this snapshot; use as canonical research baseline.
 
 Use the registry script for reproducibility and the canonical run recipe; no engine/deployment configs are touched.
 # kuma_trend Strategy Overview (v0)
