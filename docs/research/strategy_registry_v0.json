@@ -124,6 +124,68 @@
         "venv_trend_crypto/bin/python scripts/research/benchmark_btc_hold_v0.py --db ../data/coinbase_daily_121025.duckdb --price_table bars_1d_usd_universe_clean_top50_adv10m --symbol ETH-USD --equity_csv artifacts/research/alpha_ensemble_v15_growth/growth_equity_v0.csv --out_csv artifacts/research/alpha_ensemble_v15_growth/benchmark_eth_usd_equity_v0.csv",
         "venv_trend_crypto/bin/python scripts/research/alpha_ensemble_v15_growth_tearsheet_v0.py --research_dir artifacts/research/alpha_ensemble_v15_growth --metrics_csv artifacts/research/alpha_ensemble_v15_growth/metrics_growth_v15_v0.csv --benchmark_equity_csv artifacts/research/alpha_ensemble_v15_growth/benchmark_eth_usd_equity_v0.csv --benchmark_label \"ETH-USD Buy & Hold\" --strategy_note_md docs/research/alpha_ensemble_v15_growth_overview_v0.md --out_pdf artifacts/research/alpha_ensemble_v15_growth/alpha_ensemble_v15_growth_tearsheet_v0.pdf"
       ]
+    },
+    {
+      "id": "ma_5_40_btc_usd_baseline_v0",
+      "name": "MA(5/40) BTC-USD long-only baseline (ADX off)",
+      "family": "trend_baseline",
+      "version": "v0",
+      "status": "canonical",
+      "universe": "BTC-USD",
+      "equity_csv": "artifacts/research/ma_5_40_btc_eth_baseline_v0/btc_usd/equity.csv",
+      "metrics_csv": "artifacts/research/ma_5_40_btc_eth_baseline_v0/btc_usd/metrics_ma_5_40_baseline_v0.csv",
+      "metrics_period": "full",
+      "tearsheet_pdf": "artifacts/research/ma_5_40_btc_eth_baseline_v0/btc_usd/ma_5_40_btc_usd_baseline_v0.pdf",
+      "canonical_period": {
+        "start": "2015-07-21T00:00:00",
+        "end": "2025-11-30T00:00:00"
+      },
+      "period": {
+        "start": "2015-07-21",
+        "end": "2025-11-30"
+      },
+      "git_tag": "v0.6-research-tooling-hardening",
+      "note_md": null,
+      "run_recipe": [
+        "source venv_trend_crypto/bin/activate",
+        "NOTE: ensure strategy.enable_adx_filter=false in generated YAML",
+        "venv_trend_crypto/bin/python scripts/research/run_btc_eth_daily_ma_5_40_v0.py --base_config configs/research/midcap_daily_ma_5_40_v0.yaml --symbols BTC-USD ETH-USD --run_prefix ma_5_40_btc_eth_baseline_v0 --strategy.enable_adx_filter false",
+        "rsync -a artifacts/runs/ma_5_40_btc_eth_baseline_v0btc_usd_*/ artifacts/research/ma_5_40_btc_eth_baseline_v0/btc_usd/",
+        "python - <<'PY'\\n# parquet -> csv\\nimport pandas as pd, pathlib as p\\nrun=p.Path('artifacts/research/ma_5_40_btc_eth_baseline_v0/btc_usd')\\nfor name in ['equity','positions','trades']:\\n    pq=run/f\"{name}.parquet\"\\n    csv=run/f\"{name}.csv\"\\n    if pq.exists():\\n        pd.read_parquet(pq).to_csv(csv, index=False)\\nPY",
+        "python - <<'PY'\\n# metrics from manifest + summary\\nimport json, pathlib as p, pandas as pd\\nrun=p.Path('artifacts/research/ma_5_40_btc_eth_baseline_v0/btc_usd')\\nmanifest=json.loads((run/'manifest.json').read_text())\\nsummary=json.loads((run/'summary.json').read_text())\\nrow={\\n    'symbol': manifest.get('symbol'),\\n    'start': manifest['time_range']['start'],\\n    'end': manifest['time_range']['end'],\\n    'total_return': summary.get('total_return'),\\n    'sharpe': summary.get('sharpe'),\\n    'max_drawdown': summary.get('max_drawdown'),\\n    'entry_exit_events': summary.get('entry_exit_events', 0),\\n    'avg_cash_weight': summary.get('avg_cash_weight'),\\n    'cash_yield_annual': summary.get('cash_yield_annual', 0.0),\\n    'config_hash': manifest.get('config_hash'),\\n    'git_hash': manifest.get('git_hash'),\\n    'generated_at': manifest.get('generated_at'),\\n    'equity_csv': str(run/'equity.csv'),\\n    'positions_csv': str(run/'positions.csv'),\\n    'trades_csv': str(run/'trades.csv'),\\n}\\npd.DataFrame([row]).to_csv(run/'metrics_ma_5_40_baseline_v0.csv', index=False)\\nPY",
+        "# optional: generate tear sheet -> artifacts/research/ma_5_40_btc_eth_baseline_v0/btc_usd/ma_5_40_btc_usd_baseline_v0.pdf"
+      ]
+    },
+    {
+      "id": "ma_5_40_eth_usd_baseline_v0",
+      "name": "MA(5/40) ETH-USD long-only baseline (ADX off)",
+      "family": "trend_baseline",
+      "version": "v0",
+      "status": "canonical",
+      "universe": "ETH-USD",
+      "equity_csv": "artifacts/research/ma_5_40_btc_eth_baseline_v0/eth_usd/equity.csv",
+      "metrics_csv": "artifacts/research/ma_5_40_btc_eth_baseline_v0/eth_usd/metrics_ma_5_40_baseline_v0.csv",
+      "metrics_period": "full",
+      "tearsheet_pdf": "artifacts/research/ma_5_40_btc_eth_baseline_v0/eth_usd/ma_5_40_eth_usd_baseline_v0.pdf",
+      "canonical_period": {
+        "start": "2016-05-17T00:00:00",
+        "end": "2025-11-30T00:00:00"
+      },
+      "period": {
+        "start": "2016-05-17",
+        "end": "2025-11-30"
+      },
+      "git_tag": "v0.6-research-tooling-hardening",
+      "note_md": null,
+      "run_recipe": [
+        "source venv_trend_crypto/bin/activate",
+        "NOTE: ensure strategy.enable_adx_filter=false in generated YAML",
+        "venv_trend_crypto/bin/python scripts/research/run_btc_eth_daily_ma_5_40_v0.py --base_config configs/research/midcap_daily_ma_5_40_v0.yaml --symbols BTC-USD ETH-USD --run_prefix ma_5_40_btc_eth_baseline_v0 --strategy.enable_adx_filter false",
+        "rsync -a artifacts/runs/ma_5_40_btc_eth_baseline_v0eth_usd_*/ artifacts/research/ma_5_40_btc_eth_baseline_v0/eth_usd/",
+        "python - <<'PY'\\n# parquet -> csv\\nimport pandas as pd, pathlib as p\\nrun=p.Path('artifacts/research/ma_5_40_btc_eth_baseline_v0/eth_usd')\\nfor name in ['equity','positions','trades']:\\n    pq=run/f\"{name}.parquet\"\\n    csv=run/f\"{name}.csv\"\\n    if pq.exists():\\n        pd.read_parquet(pq).to_csv(csv, index=False)\\nPY",
+        "python - <<'PY'\\n# metrics from manifest + summary\\nimport json, pathlib as p, pandas as pd\\nrun=p.Path('artifacts/research/ma_5_40_btc_eth_baseline_v0/eth_usd')\\nmanifest=json.loads((run/'manifest.json').read_text())\\nsummary=json.loads((run/'summary.json').read_text())\\nrow={\\n    'symbol': manifest.get('symbol'),\\n    'start': manifest['time_range']['start'],\\n    'end': manifest['time_range']['end'],\\n    'total_return': summary.get('total_return'),\\n    'sharpe': summary.get('sharpe'),\\n    'max_drawdown': summary.get('max_drawdown'),\\n    'entry_exit_events': summary.get('entry_exit_events', 0),\\n    'avg_cash_weight': summary.get('avg_cash_weight'),\\n    'cash_yield_annual': summary.get('cash_yield_annual', 0.0),\\n    'config_hash': manifest.get('config_hash'),\\n    'git_hash': manifest.get('git_hash'),\\n    'generated_at': manifest.get('generated_at'),\\n    'equity_csv': str(run/'equity.csv'),\\n    'positions_csv': str(run/'positions.csv'),\\n    'trades_csv': str(run/'trades.csv'),\\n}\\npd.DataFrame([row]).to_csv(run/'metrics_ma_5_40_baseline_v0.csv', index=False)\\nPY",
+        "# optional: generate tear sheet -> artifacts/research/ma_5_40_btc_eth_baseline_v0/eth_usd/ma_5_40_eth_usd_baseline_v0.pdf"
+      ]
     }
   ]
 }

@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
+import math
 import os
 import subprocess
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import sys
-
-import pandas as pd
 
 REGISTRY_PATH = "docs/research/strategy_registry_v0.json"
 REPO_ROOT = "/Users/russellfloyd/Dropbox/NRT/nrt_dev/trend_crypto"
@@ -22,69 +22,132 @@ def load_registry(path: Optional[str] = None) -> List[Dict[str, Any]]:
     return data.get("strategies", [])
 
 
-def load_metrics(strategy: Dict[str, Any]) -> Dict[str, float]:
+def _coerce_float(value: Optional[str]) -> Optional[float]:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _get_metric(row: Dict[str, str], keys: List[str]) -> Optional[float]:
+    for key in keys:
+        if key in row:
+            val = _coerce_float(row.get(key))
+            if val is not None:
+                return val
+    return None
+
+
+def _select_metrics_row(rows: List[Dict[str, str]], period_key: str) -> Dict[str, str]:
+    if not rows:
+        return {}
+    if len(rows) == 1:
+        return rows[0]
+    for col in ("period", "label"):
+        if col in rows[0]:
+            for row in rows:
+                if row.get(col) == period_key:
+                    return row
+    return rows[0]
+
+
+def load_metrics(strategy: Dict[str, Any]) -> Dict[str, Optional[float]]:
     metrics_csv = strategy.get("metrics_csv")
     period_key = strategy.get("metrics_period", "full")
     if not metrics_csv or not os.path.exists(metrics_csv):
         return {"cagr": None, "sharpe": None, "max_dd": None}
 
-    df = pd.read_csv(metrics_csv)
-    # If no period column, try matching on label (e.g., base_vs_growth), else first row.
-    if "period" in df.columns:
-        if period_key in df["period"].values:
-            row = df.loc[df["period"] == period_key].iloc[0]
-        else:
-            row = df.iloc[0]
-    elif "label" in df.columns and period_key in df["label"].values:
-        row = df.loc[df["label"] == period_key].iloc[0]
-    else:
-        row = df.iloc[0]
+    with open(metrics_csv, newline="") as f:
+        rows = list(csv.DictReader(f))
+    row = _select_metrics_row(rows, period_key)
 
     return {
-        "cagr": float(row.get("cagr", float("nan"))),
-        "sharpe": float(row.get("sharpe", float("nan"))),
-        "max_dd": float(row.get("max_dd", float("nan"))),
+        "cagr": _get_metric(row, ["cagr", "CAGR"]),
+        "sharpe": _get_metric(row, ["sharpe", "Sharpe"]),
+        "max_dd": _get_metric(row, ["max_dd", "MaxDD", "max_drawdown"]),
     }
 
 
 def fmt_pct(x: float | None) -> str:
-    if x is None or pd.isna(x):
+    if x is None or (isinstance(x, float) and math.isnan(x)):
         return "n/a"
     return f"{x * 100:.2f}%"
 
 
 def fmt_num(x: float | None) -> str:
-    if x is None or pd.isna(x):
+    if x is None or (isinstance(x, float) and math.isnan(x)):
         return "n/a"
     return f"{x:.2f}"
 
 
+def resolve_period(strategy: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
+    if strategy.get("start_date") or strategy.get("end_date"):
+        return strategy.get("start_date"), strategy.get("end_date")
+
+    period = strategy.get("canonical_period")
+    if isinstance(period, dict):
+        start = period.get("start")
+        end = period.get("end")
+        if start or end:
+            return start, end
+
+    period = strategy.get("period")
+    if isinstance(period, dict):
+        start = period.get("start")
+        end = period.get("end")
+        if start or end:
+            return start, end
+    if isinstance(period, str) and "→" in period:
+        start, end = [part.strip() for part in period.split("→", 1)]
+        return start or None, end or None
+
+    return None, None
+
+
+def build_list_row(strategy: Dict[str, Any]) -> Dict[str, Any]:
+    m = load_metrics(strategy)
+    start, end = resolve_period(strategy)
+    return {
+        "id": strategy.get("id"),
+        "name": strategy.get("name"),
+        "family": strategy.get("family"),
+        "version": strategy.get("version"),
+        "status": strategy.get("status"),
+        "start": start,
+        "end": end,
+        "CAGR": fmt_pct(m["cagr"]),
+        "Sharpe": fmt_num(m["sharpe"]),
+        "MaxDD": fmt_pct(m["max_dd"]),
+    }
+
+
 def cmd_list(_: argparse.Namespace) -> None:
     strategies = load_registry()
-    rows = []
+    rows: List[Dict[str, Any]] = []
     for s in strategies:
-        m = load_metrics(s)
-        period = s.get("canonical_period", {})
-        rows.append(
-            {
-                "id": s.get("id"),
-                "name": s.get("name"),
-                "family": s.get("family"),
-                "version": s.get("version"),
-                "status": s.get("status"),
-                "start": period.get("start"),
-                "end": period.get("end"),
-                "CAGR": fmt_pct(m["cagr"]),
-                "Sharpe": fmt_num(m["sharpe"]),
-                "MaxDD": fmt_pct(m["max_dd"]),
-            }
-        )
+        rows.append(build_list_row(s))
 
-    df = pd.DataFrame(rows)
-    df["status_rank"] = df["status"].map({"canonical": 0, "experiment": 1, "archived": 2}).fillna(3)
-    df = df.sort_values(["status_rank", "family", "id"])
-    df = df.drop(columns=["status_rank"])
-    print(df.to_string(index=False))
+    def status_rank(status: Optional[str]) -> int:
+        return {"canonical": 0, "experiment": 1, "archived": 2}.get(status, 3)
+
+    rows = sorted(rows, key=lambda r: (status_rank(r.get("status")), r.get("family"), r.get("id")))
+
+    columns = ["id", "name", "family", "version", "status", "start", "end", "CAGR", "Sharpe", "MaxDD"]
+    display_rows: List[List[str]] = []
+    for row in rows:
+        display_rows.append([str(row.get(col)) if row.get(col) is not None else "None" for col in columns])
+
+    widths = [len(col) for col in columns]
+    for row in display_rows:
+        for i, value in enumerate(row):
+            widths[i] = max(widths[i], len(value))
+
+    header = " ".join(col.ljust(widths[i]) for i, col in enumerate(columns))
+    print(header)
+    for row in display_rows:
+        print(" ".join(value.ljust(widths[i]) for i, value in enumerate(row)))
 
 
 def find_strategy(strategy_id: str) -> Dict[str, Any]:
@@ -98,7 +161,7 @@ def find_strategy(strategy_id: str) -> Dict[str, Any]:
 def cmd_show(args: argparse.Namespace) -> None:
     s = find_strategy(args.id)
     m = load_metrics(s)
-    period = s.get("canonical_period", {})
+    start, end = resolve_period(s)
     print(f"id         : {s.get('id')}")
     print(f"name       : {s.get('name')}")
     print(f"family     : {s.get('family')}")
@@ -108,7 +171,7 @@ def cmd_show(args: argparse.Namespace) -> None:
     print(f"equity_csv : {s.get('equity_csv')}")
     print(f"metrics_csv: {s.get('metrics_csv')}")
     print(f"tearsheet  : {s.get('tearsheet_pdf')}")
-    print(f"period     : {period.get('start')} → {period.get('end')}")
+    print(f"period     : {start} → {end}")
     print(f"CAGR       : {fmt_pct(m['cagr'])}")
     print(f"Sharpe     : {fmt_num(m['sharpe'])}")
     print(f"MaxDD      : {fmt_pct(m['max_dd'])}")
