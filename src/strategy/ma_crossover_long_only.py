@@ -18,7 +18,7 @@ class MACrossoverLongOnlyStrategy(TargetWeightStrategy):
         target_vol_annual: Optional[float] = None,
         vol_lookback: int = 20,
         max_weight: float = 1.0,
-        enable_adx_filter: bool = True,
+        enable_adx_filter: bool = False,
         adx_window: int = 14,
         adx_threshold: float = 20.0,
         adx_entry_only: bool = False,

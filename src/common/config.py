@@ -42,7 +42,7 @@ class StrategyConfig(BaseModel):
     max_weight: float = 1.0
     adx_window: int = 14
     adx_threshold: float = 20.0
-    enable_adx_filter: bool = True
+    enable_adx_filter: bool = False
     adx_entry_only: bool = False
 
     @model_validator(mode="after")
