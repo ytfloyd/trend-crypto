@@ -14,6 +14,11 @@ pip install -e .
 # pip install -e .[dev]
 ```
 
+## CI
+
+GitHub Actions runs registry validation and `pytest -q` on pull requests and pushes to `main`.
+Optional dependencies (e.g., duckdb/polars) are skipped when missing in CI.
+
 ## Run a backtest
 
 ```bash
