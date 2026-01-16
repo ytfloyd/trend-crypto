@@ -1,3 +1,7 @@
+import pytest
+
+pytest.importorskip("polars")
+
 from src.common.config import StrategyConfig
 from src.strategy.ma_crossover_long_only import MACrossoverLongOnlyStrategy
 
