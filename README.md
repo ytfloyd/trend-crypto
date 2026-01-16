@@ -119,6 +119,21 @@ Notes:
 - Research-only workflow; does not affect V2.5 deployment or production configs.
 - No tests were run (not requested).
 
+## Research (MA 5/40 BTC/ETH baseline)
+
+Run the MA(5/40) BTC/ETH baseline using the portable template config:
+
+```bash
+export DUCKDB_PATH=/path/to/market.duckdb
+python scripts/research/run_btc_eth_daily_ma_5_40_v0.py \
+  --base_config configs/research/btc_eth_daily_ma_5_40_v0.template.yaml \
+  --symbols BTC-USD ETH-USD \
+  --run_prefix ma_5_40_btc_eth_baseline_v0
+```
+
+Notes:
+- ADX defaults OFF unless explicitly enabled in config/overrides.
+
 ## Research (USD universe)
 
 Create/refresh USD spot universe (ex-stablecoin bases) from bars_1d_clean:
