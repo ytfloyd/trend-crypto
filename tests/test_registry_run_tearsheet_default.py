@@ -1,6 +1,17 @@
 from scripts.research import strategy_registry_v0 as reg
 
 
+def _strip_python_prefix(cmd: str) -> str:
+    parts = cmd.strip().split(maxsplit=1)
+    if not parts:
+        return cmd
+    exe = parts[0]
+    if "python" in exe:
+        rest = parts[1] if len(parts) > 1 else ""
+        return f"python {rest}".strip()
+    return cmd
+
+
 def test_pythonpath_env_injected_for_python_steps(monkeypatch):
     calls = []
 
@@ -57,7 +68,8 @@ def test_run_plan_includes_tearsheet_by_default():
         tearsheet_only_top=None,
         tearsheet_dir=None,
     )
-    assert recipe[1] in plan
+    normalized_plan = [_strip_python_prefix(c) for c in plan]
+    assert recipe[1] in normalized_plan
 
 
 def test_run_plan_skips_tearsheet_when_disabled():
@@ -88,5 +100,6 @@ def test_run_plan_tearsheet_only_top():
         tearsheet_only_top=1,
         tearsheet_dir=None,
     )
-    assert recipe[1] in plan
-    assert recipe[2] not in plan
+    normalized_plan = [_strip_python_prefix(c) for c in plan]
+    assert recipe[1] in normalized_plan
+    assert recipe[2] not in normalized_plan
