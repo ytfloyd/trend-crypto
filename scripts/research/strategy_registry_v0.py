@@ -188,8 +188,9 @@ def build_run_plan(
     no_tearsheet: bool,
     tearsheet_only_top: Optional[int],
     tearsheet_dir: Optional[str],
-    python_path: str,
+    python_path: Optional[str] = None,
 ) -> List[str]:
+    python_path = python_path or sys.executable
     plan: List[str] = []
     tearsheet_count = 0
     for line in recipe:
