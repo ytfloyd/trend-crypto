@@ -148,12 +148,11 @@
       "note_md": null,
       "run_recipe": [
         "source venv_trend_crypto/bin/activate",
-        "NOTE: ensure strategy.enable_adx_filter=false in generated YAML",
-        "venv_trend_crypto/bin/python scripts/research/run_btc_eth_daily_ma_5_40_v0.py --base_config configs/research/midcap_daily_ma_5_40_v0.yaml --symbols BTC-USD ETH-USD --run_prefix ma_5_40_btc_eth_baseline_v0 --strategy.enable_adx_filter false",
+        "venv_trend_crypto/bin/python scripts/research/run_btc_eth_daily_ma_5_40_v0.py --base_config configs/research/midcap_daily_ma_5_40_v0.yaml --symbols BTC-USD ETH-USD --run_prefix ma_5_40_btc_eth_baseline_v0",
         "rsync -a artifacts/runs/ma_5_40_btc_eth_baseline_v0btc_usd_*/ artifacts/research/ma_5_40_btc_eth_baseline_v0/btc_usd/",
         "python - <<'PY'\\n# parquet -> csv\\nimport pandas as pd, pathlib as p\\nrun=p.Path('artifacts/research/ma_5_40_btc_eth_baseline_v0/btc_usd')\\nfor name in ['equity','positions','trades']:\\n    pq=run/f\"{name}.parquet\"\\n    csv=run/f\"{name}.csv\"\\n    if pq.exists():\\n        pd.read_parquet(pq).to_csv(csv, index=False)\\nPY",
         "python - <<'PY'\\n# metrics from manifest + summary\\nimport json, pathlib as p, pandas as pd\\nrun=p.Path('artifacts/research/ma_5_40_btc_eth_baseline_v0/btc_usd')\\nmanifest=json.loads((run/'manifest.json').read_text())\\nsummary=json.loads((run/'summary.json').read_text())\\nrow={\\n    'symbol': manifest.get('symbol'),\\n    'start': manifest['time_range']['start'],\\n    'end': manifest['time_range']['end'],\\n    'total_return': summary.get('total_return'),\\n    'sharpe': summary.get('sharpe'),\\n    'max_drawdown': summary.get('max_drawdown'),\\n    'entry_exit_events': summary.get('entry_exit_events', 0),\\n    'avg_cash_weight': summary.get('avg_cash_weight'),\\n    'cash_yield_annual': summary.get('cash_yield_annual', 0.0),\\n    'config_hash': manifest.get('config_hash'),\\n    'git_hash': manifest.get('git_hash'),\\n    'generated_at': manifest.get('generated_at'),\\n    'equity_csv': str(run/'equity.csv'),\\n    'positions_csv': str(run/'positions.csv'),\\n    'trades_csv': str(run/'trades.csv'),\\n}\\npd.DataFrame([row]).to_csv(run/'metrics_ma_5_40_baseline_v0.csv', index=False)\\nPY",
-        "# optional: generate tear sheet -> artifacts/research/ma_5_40_btc_eth_baseline_v0/btc_usd/ma_5_40_btc_usd_baseline_v0.pdf"
+        "venv_trend_crypto/bin/python scripts/research/ma_baseline_tearsheet_v0.py --research_dir artifacts/research/ma_5_40_btc_eth_baseline_v0/btc_usd --equity_csv artifacts/research/ma_5_40_btc_eth_baseline_v0/btc_usd/equity.csv --metrics_csv artifacts/research/ma_5_40_btc_eth_baseline_v0/btc_usd/metrics_ma_5_40_baseline_v0.csv --out_pdf artifacts/research/ma_5_40_btc_eth_baseline_v0/btc_usd/ma_5_40_btc_usd_baseline_v0.pdf"
       ]
     },
     {
@@ -179,12 +178,11 @@
       "note_md": null,
       "run_recipe": [
         "source venv_trend_crypto/bin/activate",
-        "NOTE: ensure strategy.enable_adx_filter=false in generated YAML",
-        "venv_trend_crypto/bin/python scripts/research/run_btc_eth_daily_ma_5_40_v0.py --base_config configs/research/midcap_daily_ma_5_40_v0.yaml --symbols BTC-USD ETH-USD --run_prefix ma_5_40_btc_eth_baseline_v0 --strategy.enable_adx_filter false",
+        "venv_trend_crypto/bin/python scripts/research/run_btc_eth_daily_ma_5_40_v0.py --base_config configs/research/midcap_daily_ma_5_40_v0.yaml --symbols BTC-USD ETH-USD --run_prefix ma_5_40_btc_eth_baseline_v0",
         "rsync -a artifacts/runs/ma_5_40_btc_eth_baseline_v0eth_usd_*/ artifacts/research/ma_5_40_btc_eth_baseline_v0/eth_usd/",
         "python - <<'PY'\\n# parquet -> csv\\nimport pandas as pd, pathlib as p\\nrun=p.Path('artifacts/research/ma_5_40_btc_eth_baseline_v0/eth_usd')\\nfor name in ['equity','positions','trades']:\\n    pq=run/f\"{name}.parquet\"\\n    csv=run/f\"{name}.csv\"\\n    if pq.exists():\\n        pd.read_parquet(pq).to_csv(csv, index=False)\\nPY",
         "python - <<'PY'\\n# metrics from manifest + summary\\nimport json, pathlib as p, pandas as pd\\nrun=p.Path('artifacts/research/ma_5_40_btc_eth_baseline_v0/eth_usd')\\nmanifest=json.loads((run/'manifest.json').read_text())\\nsummary=json.loads((run/'summary.json').read_text())\\nrow={\\n    'symbol': manifest.get('symbol'),\\n    'start': manifest['time_range']['start'],\\n    'end': manifest['time_range']['end'],\\n    'total_return': summary.get('total_return'),\\n    'sharpe': summary.get('sharpe'),\\n    'max_drawdown': summary.get('max_drawdown'),\\n    'entry_exit_events': summary.get('entry_exit_events', 0),\\n    'avg_cash_weight': summary.get('avg_cash_weight'),\\n    'cash_yield_annual': summary.get('cash_yield_annual', 0.0),\\n    'config_hash': manifest.get('config_hash'),\\n    'git_hash': manifest.get('git_hash'),\\n    'generated_at': manifest.get('generated_at'),\\n    'equity_csv': str(run/'equity.csv'),\\n    'positions_csv': str(run/'positions.csv'),\\n    'trades_csv': str(run/'trades.csv'),\\n}\\npd.DataFrame([row]).to_csv(run/'metrics_ma_5_40_baseline_v0.csv', index=False)\\nPY",
-        "# optional: generate tear sheet -> artifacts/research/ma_5_40_btc_eth_baseline_v0/eth_usd/ma_5_40_eth_usd_baseline_v0.pdf"
+        "venv_trend_crypto/bin/python scripts/research/ma_baseline_tearsheet_v0.py --research_dir artifacts/research/ma_5_40_btc_eth_baseline_v0/eth_usd --equity_csv artifacts/research/ma_5_40_btc_eth_baseline_v0/eth_usd/equity.csv --metrics_csv artifacts/research/ma_5_40_btc_eth_baseline_v0/eth_usd/metrics_ma_5_40_baseline_v0.csv --out_pdf artifacts/research/ma_5_40_btc_eth_baseline_v0/eth_usd/ma_5_40_eth_usd_baseline_v0.pdf"
       ]
     }
   ]

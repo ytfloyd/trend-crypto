@@ -7,6 +7,7 @@ import json
 import math
 import os
 import subprocess
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import sys
 
@@ -123,6 +124,90 @@ def build_list_row(strategy: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _is_tearsheet_command(line: str, tearsheet_pdf: Optional[str] = None) -> bool:
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        return False
+    lower = stripped.lower()
+    if "tearsheet" not in lower:
+        return False
+    if tearsheet_pdf and tearsheet_pdf in stripped:
+        return True
+    return "--out_pdf" in lower or "tearsheet" in lower
+
+
+def _should_skip_line(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped:
+        return True
+    if stripped.startswith("#"):
+        return True
+    if stripped.startswith("NOTE:") or stripped.startswith("NOTE "):
+        return True
+    if stripped.startswith("source "):
+        return True
+    return False
+
+
+def _rewrite_python_command(line: str, python_path: str) -> str:
+    stripped = line.lstrip()
+    if stripped.startswith("python "):
+        return f"{python_path} {stripped[len('python '):]}"
+    if stripped.startswith("venv_trend_crypto/bin/python "):
+        return f"{python_path} {stripped[len('venv_trend_crypto/bin/python '):]}"
+    return line
+
+
+def _is_python_command(line: str, python_path: str) -> bool:
+    stripped = line.lstrip()
+    if stripped.startswith("python ") or stripped.startswith("venv_trend_crypto/bin/python "):
+        return True
+    cmd = stripped.split()[0] if stripped.split() else ""
+    if python_path and cmd == python_path:
+        return True
+    return "python" in cmd
+
+
+def _override_tearsheet_output(line: str, tearsheet_pdf: Optional[str], tearsheet_dir: Optional[str]) -> str:
+    if not tearsheet_dir or not tearsheet_pdf:
+        return line
+    if tearsheet_pdf not in line:
+        return line
+    new_pdf = str(Path(tearsheet_dir) / Path(tearsheet_pdf).name)
+    return line.replace(tearsheet_pdf, new_pdf)
+
+
+def _recipe_has_tearsheet(recipe: List[str], tearsheet_pdf: Optional[str]) -> bool:
+    return any(_is_tearsheet_command(line, tearsheet_pdf) for line in recipe)
+
+
+def build_run_plan(
+    recipe: List[str],
+    *,
+    tearsheet_pdf: Optional[str],
+    no_tearsheet: bool,
+    tearsheet_only_top: Optional[int],
+    tearsheet_dir: Optional[str],
+    python_path: str,
+) -> List[str]:
+    plan: List[str] = []
+    tearsheet_count = 0
+    for line in recipe:
+        if _should_skip_line(line):
+            continue
+        line = _rewrite_python_command(line, python_path)
+        if _is_tearsheet_command(line, tearsheet_pdf):
+            if no_tearsheet:
+                continue
+            if tearsheet_only_top is not None and tearsheet_count >= tearsheet_only_top:
+                continue
+            tearsheet_count += 1
+            plan.append(_override_tearsheet_output(line, tearsheet_pdf, tearsheet_dir))
+            continue
+        plan.append(line)
+    return plan
+
+
 def cmd_list(_: argparse.Namespace) -> None:
     strategies = load_registry()
     rows: List[Dict[str, Any]] = []
@@ -192,12 +277,28 @@ def cmd_run(args: argparse.Namespace) -> None:
     if not recipe:
         raise SystemExit(f"No run_recipe defined for strategy {args.id}")
 
+    no_tearsheet = args.no_tearsheet and not args.tearsheet
+    plan = build_run_plan(
+        recipe,
+        tearsheet_pdf=s.get("tearsheet_pdf"),
+        no_tearsheet=no_tearsheet,
+        tearsheet_only_top=args.tearsheet_only_top,
+        tearsheet_dir=args.tearsheet_dir,
+        python_path=args.python,
+    )
+
     print(f"Running strategy pipeline for: {args.id}")
-    for line in recipe:
-        if not line.strip() or line.strip().startswith("#"):
-            continue
+    for line in plan:
+        env = None
+        if not args.no_pythonpath and _is_python_command(line, args.python):
+            env = os.environ.copy()
+            prefix = f".{os.pathsep}src"
+            if env.get("PYTHONPATH"):
+                env["PYTHONPATH"] = f"{prefix}{os.pathsep}{env['PYTHONPATH']}"
+            else:
+                env["PYTHONPATH"] = prefix
         print(f"\n[RUN] {line}")
-        result = subprocess.run(line, shell=True, cwd=REPO_ROOT)
+        result = subprocess.run(line, shell=True, cwd=REPO_ROOT, env=env)
         if result.returncode != 0:
             raise SystemExit(f"Command failed with code {result.returncode}: {line}")
     print("\nDone.")
@@ -220,7 +321,7 @@ def _validate_status_fields(s: Dict[str, Any]) -> List[str]:
     if status == "canonical":
         needed = ["equity_csv", "metrics_csv", "tearsheet_pdf", "run_recipe"]
     elif status == "incubation":
-        needed = ["equity_csv", "metrics_csv", "tearsheet_pdf", "run_recipe"]
+        needed = ["equity_csv", "metrics_csv", "run_recipe"]
     else:
         needed = []
     for f in needed:
@@ -233,6 +334,12 @@ def _validate_status_fields(s: Dict[str, Any]) -> List[str]:
         period = s.get("period") or s.get("canonical_period")
         if not period or not period.get("start") or not period.get("end"):
             errs.append(f"period.start/end required for status={status}")
+        if status == "canonical":
+            tearsheet_pdf = s.get("tearsheet_pdf")
+            if not isinstance(tearsheet_pdf, str) or not tearsheet_pdf.strip():
+                errs.append("tearsheet_pdf required for status=canonical")
+            elif not _recipe_has_tearsheet(rr, tearsheet_pdf):
+                errs.append("run_recipe must include a tearsheet generation step for canonical strategies")
     return errs
 
 
@@ -278,6 +385,31 @@ def main() -> None:
 
     p_run = sub.add_parser("run", help="Execute the run_recipe for a strategy.")
     p_run.add_argument("--id", required=True, help="Strategy id from registry.")
+    p_run.add_argument(
+        "--python",
+        default=sys.executable,
+        help="Python interpreter to use for run_recipe steps (default: current interpreter).",
+    )
+    p_run.add_argument(
+        "--no-pythonpath",
+        action="store_true",
+        help="Do not inject PYTHONPATH=.",
+    )
+    g = p_run.add_mutually_exclusive_group()
+    g.add_argument("--no-tearsheet", action="store_true", help="Skip tearsheet generation.")
+    g.add_argument("--tearsheet", action="store_true", help="Force tearsheet generation.")
+    p_run.add_argument(
+        "--tearsheet-only-top",
+        type=int,
+        default=None,
+        help="If multiple tearsheets are present in the recipe, run only the first N.",
+    )
+    p_run.add_argument(
+        "--tearsheet-dir",
+        type=str,
+        default=None,
+        help="Optional override directory for tearsheet output PDF filenames.",
+    )
 
     sub.add_parser("validate", help="Validate registry against schema and status rules.")
 
