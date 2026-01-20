@@ -95,7 +95,13 @@ def build_provenance_text(equity_csv: str, metrics_csv: str, manifest_path: Opti
 
 def load_equity_csv(path: str, ts_col: str = "ts", equity_col: str = "portfolio_equity") -> pd.Series:
     """Load equity CSV and return a Series indexed by ts named 'equity'."""
-    df = pd.read_csv(path, parse_dates=[ts_col])
+    df = pd.read_csv(path)
+    if ts_col not in df.columns:
+        raise ValueError(f"Equity CSV missing '{ts_col}' column: {path}")
+    ts = pd.to_datetime(df[ts_col], utc=True, errors="coerce")
+    if ts.isna().any():
+        raise ValueError(f"Equity CSV has invalid timestamps: {path}")
+    df[ts_col] = _normalize_datetime_series(ts)
     candidates = [c for c in [equity_col, "equity"] if c in df.columns]
     if not candidates:
         value_cols = [c for c in df.columns if c != ts_col]
@@ -131,23 +137,159 @@ def compute_stats(eq: pd.Series, rf_annual: float = 0.0) -> Dict[str, float]:
 
 
 def load_benchmark_equity(path: str, strategy_index: pd.DatetimeIndex) -> pd.Series:
-    """Load benchmark CSV (ts, equity), align to strategy_index, ffill, normalize to 1.0."""
+    """Load benchmark CSV (ts, equity), align to strategy_index, ffill/bfill, normalize to 1.0."""
     if not path or not os.path.exists(path):
         raise FileNotFoundError(f"Benchmark CSV not found: {path}")
-    df = pd.read_csv(path, parse_dates=["ts"])
+    df = pd.read_csv(path)
+    if "ts" not in df.columns:
+        raise ValueError(f"Benchmark CSV missing ts column: {path}")
     if "equity" not in df.columns:
         value_cols = [c for c in df.columns if c != "ts"]
         if value_cols:
             df = df.rename(columns={value_cols[0]: "equity"})
         else:
             raise ValueError(f"Benchmark CSV missing equity column: {path}")
-    bench = df.set_index("ts")["equity"].astype(float).sort_index()
-    bench = bench.reindex(strategy_index).ffill().dropna()
-    if bench.empty:
-        raise ValueError("Benchmark has no overlap with reference dates.")
+    bench_ts = pd.to_datetime(df["ts"], utc=True, errors="coerce")
+    if bench_ts.isna().any():
+        raise ValueError(f"Benchmark CSV has invalid timestamps: {path}")
+    bench = df.assign(ts=_normalize_datetime_series(bench_ts)).set_index("ts")["equity"].astype(float).sort_index()
+    bench = _align_benchmark_series(bench, strategy_index)
     bench = bench / bench.iloc[0]
     bench.name = "benchmark_equity"
     return bench
+
+
+def _normalize_datetime_series(series: pd.Series) -> pd.Series:
+    series = pd.to_datetime(series, utc=True, errors="coerce")
+    if series.isna().any():
+        raise ValueError("Series contains invalid timestamps.")
+    series = series.dt.tz_convert("UTC").dt.tz_localize(None)
+    if (series.dt.hour == 0).all() and (series.dt.minute == 0).all() and (series.dt.second == 0).all():
+        series = series.dt.normalize()
+    return series
+
+
+def _normalize_datetime_index(index: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    if not isinstance(index, pd.DatetimeIndex):
+        index = pd.to_datetime(index, utc=True, errors="coerce")
+    else:
+        index = pd.to_datetime(index, utc=True, errors="coerce")
+    if index.isna().any():
+        raise ValueError("Index contains invalid timestamps.")
+    index = index.tz_convert("UTC").tz_localize(None)
+    if (index.hour == 0).all() and (index.minute == 0).all() and (index.second == 0).all():
+        index = index.normalize()
+    return index
+
+
+def _align_benchmark_series(
+    bench: pd.Series,
+    strategy_index: pd.DatetimeIndex,
+) -> pd.Series:
+    strategy_index_norm = _normalize_datetime_index(strategy_index)
+    bench_index_norm = _normalize_datetime_index(bench.index)
+    bench = bench.copy()
+    bench.index = bench_index_norm
+    aligned = bench.reindex(strategy_index_norm).ffill().bfill()
+    if aligned.isna().all() or np.isclose(aligned.fillna(0.0).values, 0.0).all():
+        bench_info = {
+            "bench_min": bench_index_norm.min(),
+            "bench_max": bench_index_norm.max(),
+            "bench_count": len(bench_index_norm),
+            "bench_head": bench_index_norm[:3].tolist(),
+            "bench_tail": bench_index_norm[-3:].tolist(),
+            "strategy_min": strategy_index_norm.min(),
+            "strategy_max": strategy_index_norm.max(),
+            "strategy_count": len(strategy_index_norm),
+            "strategy_head": strategy_index_norm[:3].tolist(),
+            "strategy_tail": strategy_index_norm[-3:].tolist(),
+        }
+        raise ValueError(
+            "Benchmark alignment yielded empty or zero series. "
+            f"strategy_index dtype={strategy_index.dtype} tz={strategy_index.tz} "
+            f"benchmark_index dtype={bench_index_norm.dtype} tz=None "
+            f"details={bench_info}"
+        )
+    return aligned
+
+
+def get_default_benchmark_equity(
+    strategy_index: pd.DatetimeIndex,
+    research_dir: Optional[str] = None,
+    benchmark_equity_csv: Optional[str] = None,
+    benchmark_label: Optional[str] = None,
+    default_symbol: str = "BTC-USD",
+) -> tuple[Optional[pd.Series], str]:
+    label = benchmark_label or "BTC Buy & Hold"
+    strategy_index = _normalize_datetime_index(strategy_index)
+    if benchmark_equity_csv:
+        return load_benchmark_equity(benchmark_equity_csv, strategy_index), label
+
+    cache_path = Path("artifacts/research/benchmarks/btc_usd_buy_and_hold_equity.csv")
+    if cache_path.exists():
+        return load_benchmark_equity(str(cache_path), strategy_index), label
+
+    if not research_dir:
+        raise FileNotFoundError(
+            "No benchmark CSV provided and no research_dir supplied to locate manifest.json."
+        )
+
+    manifest_path = Path(research_dir) / "manifest.json"
+    if not manifest_path.exists():
+        raise FileNotFoundError(
+            f"Benchmark cache missing and manifest.json not found: {manifest_path}"
+        )
+
+    try:
+        import duckdb  # type: ignore
+    except ImportError as exc:
+        raise ImportError(
+            "duckdb is required to auto-generate benchmark equity. "
+            "Install duckdb or provide --benchmark_equity_csv."
+        ) from exc
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    params = manifest.get("params", {})
+    data_cfg = params.get("data", {})
+    db_path = data_cfg.get("db_path")
+    table = data_cfg.get("table")
+    time_range = manifest.get("time_range", {})
+    start = time_range.get("start")
+    end = time_range.get("end")
+    if not db_path or not table or not start or not end:
+        raise ValueError("manifest.json missing db_path/table/start/end for benchmark generation.")
+
+    con = duckdb.connect(db_path)
+    query = f"""
+        SELECT ts, close
+        FROM {table}
+        WHERE symbol = ? AND ts >= ? AND ts <= ?
+        ORDER BY ts
+    """
+    df = con.execute(query, [default_symbol, start, end]).fetchdf()
+    if df.empty:
+        raise ValueError("Benchmark query returned no rows.")
+    df["ts"] = _normalize_datetime_series(pd.to_datetime(df["ts"], utc=True, errors="coerce"))
+    df = df.dropna(subset=["ts"]).sort_values("ts")
+    df["equity"] = df["close"] / df["close"].iloc[0]
+    bench = df.set_index("ts")["equity"].astype(float)
+    bench = _align_benchmark_series(bench, strategy_index)
+
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    df[["ts", "equity"]].to_csv(cache_path, index=False)
+    bench.name = "benchmark_equity"
+    return bench, label
+
+
+def scale_equity_to_start(series: pd.Series, target_start: float) -> pd.Series:
+    """Scale a normalized equity series to start at target_start, preserving relative movements."""
+    if series.empty:
+        raise ValueError("Cannot scale empty series.")
+    first_val = float(series.iloc[0])
+    if first_val == 0.0 or np.isnan(first_val):
+        raise ValueError(f"Cannot scale series with first value {first_val}")
+    scaled = series * (target_start / first_val)
+    return scaled
 
 
 def plot_equity_with_benchmark(
@@ -302,5 +444,7 @@ def build_benchmark_comparison_table(
             fmt_pct(bench_stats.get("max_dd")) if benchmark_label else "",
         ],
     ]
+    if not benchmark_label:
+        rows = [r[:2] for r in rows]
     cols = ["Metric", strategy_label] + ([benchmark_label] if benchmark_label else [])
     return pd.DataFrame(rows, columns=cols)
