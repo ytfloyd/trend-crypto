@@ -10,9 +10,10 @@ from common.config import (
     DataConfig,
     EngineConfig,
     ExecutionConfig,
-    RiskConfig,
-    RunConfig,
-    StrategyConfig,
+    RiskConfigRaw,
+    RunConfigRaw,
+    StrategyConfigRaw,
+    compile_config,
 )
 from data.portal import DataPortal
 from risk.risk_manager import RiskManager
@@ -56,20 +57,21 @@ def _sample_bars() -> pl.DataFrame:
 
 def test_temporal_and_fill_timing():
     bars = _sample_bars()
-    cfg = RunConfig(
+    raw_cfg = RunConfigRaw(
         run_name="test",
         data=DataConfig(
             db_path=":memory:", table="bars", symbol="BTC-USD", start=bars[0, "ts"], end=bars[2, "ts"]
         ),
         engine=EngineConfig(strict_validation=True, lookback=10, initial_cash=1000.0),
-        strategy=StrategyConfig(fast=2, slow=3, vol_window=2, k=2.0, min_band=0.0),
-        risk=RiskConfig(vol_window=2, target_vol_annual=1.0, max_weight=1.0),
+        strategy=StrategyConfigRaw(fast=2, slow=3, vol_window=2, k=2.0, min_band=0.0),
+        risk=RiskConfigRaw(vol_window=2, target_vol_annual=1.0, max_weight=1.0),
         execution=ExecutionConfig(),
     )
+    cfg = compile_config(raw_cfg)
     engine = BacktestEngine(
         cfg,
         AlwaysLong(),
-        RiskManager(cfg.risk, periods_per_year=8760),
+        RiskManager(cfg.risk, periods_per_year=cfg.annualization_factor),
         DummyPortal(bars),
     )
     portfolio, _ = engine.run()

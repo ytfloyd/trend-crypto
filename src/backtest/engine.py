@@ -6,11 +6,49 @@ import polars as pl
 
 from backtest.portfolio import Portfolio
 from backtest.validators import validate_bars, validate_context_bounds
-from common.config import RunConfig
+from common.config import RunConfigResolved
 from data.portal import DataPortal
 from strategy.context import make_strategy_context
 from strategy.base import TargetWeightStrategy
 from risk.risk_manager import RiskManager
+
+
+# Epsilon for near-zero gross PnL checks (funding cost as % of gross)
+_GROSS_PNL_EPSILON = 1e-9
+
+
+def compute_asset_returns(bars: pl.DataFrame, mode: str = "open_to_close") -> tuple[list[float], bool]:
+    """
+    Compute asset returns using open-to-close (Model B) or close-to-close fallback.
+    
+    Args:
+        bars: DataFrame with columns: ts, open, close
+        mode: "open_to_close" (default) or "close_to_close"
+    
+    Returns:
+        (asset_returns, used_close_to_close_fallback)
+        - asset_returns[0] = 0.0 (no return for first bar)
+        - asset_returns[t] = close[t]/open[t] - 1 for t>=1 (if open exists)
+        - used_close_to_close_fallback = True if fell back to close.pct_change()
+    """
+    n = bars.height
+    asset_ret_list = [0.0]  # First bar has no return
+    used_fallback = False
+    
+    if mode == "open_to_close" and "open" in bars.columns:
+        # Model B: Open-to-close returns (decision at close[t-1], execute at open[t], earn open[t]->close[t])
+        open_prices = bars["open"].to_list()
+        close_prices = bars["close"].to_list()
+        for t in range(1, n):
+            asset_ret_list.append(close_prices[t] / open_prices[t] - 1.0)
+    else:
+        # Fallback: Close-to-close returns
+        used_fallback = True
+        close_prices = bars["close"].to_list()
+        for t in range(1, n):
+            asset_ret_list.append(close_prices[t] / close_prices[t - 1] - 1.0)
+    
+    return asset_ret_list, used_fallback
 
 
 @dataclass
@@ -26,7 +64,7 @@ class BacktestEngine:
 
     def __init__(
         self,
-        cfg: RunConfig,
+        cfg: RunConfigResolved,
         strategy: TargetWeightStrategy,
         risk_manager: RiskManager,
         data_portal: DataPortal,
@@ -67,7 +105,9 @@ class BacktestEngine:
         lag = max(1, self.cfg.execution.execution_lag_bars)
         fee_slip_bps = (self.cfg.execution.fee_bps or 0.0) + (self.cfg.execution.slippage_bps or 0.0)
 
-        asset_close = bars["close"].to_list()
+        # Compute asset returns (open-to-close default, Model B)
+        asset_ret_list, used_close_to_close_fallback = compute_asset_returns(bars, mode="open_to_close")
+        
         ts_list = bars["ts"].to_list()
         nav_list = []
         gross_ret_list = []
@@ -81,6 +121,7 @@ class BacktestEngine:
         cash_weight_list = []
         cash_ret_list = []
         rf_bar_list = []
+        funding_cost_list = []
 
         nav_prev = self.cfg.engine.initial_cash
         nav_list.append(nav_prev)
@@ -92,6 +133,7 @@ class BacktestEngine:
         peak_nav = nav_prev
         dd_list.append(0.0)
         dd_scaler_list.append(1.0)
+        funding_cost_list.append(0.0)  # No funding cost at t=0
         # cash yield per bar
         diffs = bars.select(pl.col("ts").diff().dt.total_seconds()).to_series().drop_nulls()
         dt_seconds = diffs.median() if diffs.len() > 0 else 0
@@ -102,7 +144,7 @@ class BacktestEngine:
         cash_ret_list.append(rf_bar)
 
         for t in range(1, n):
-            asset_ret = asset_close[t] / asset_close[t - 1] - 1
+            asset_ret = asset_ret_list[t]
             raw_target = w_signal[t - lag] if t - lag >= 0 else 0.0
             w_prev = w_held_list[-1]
             # drawdown throttle on target
@@ -133,9 +175,14 @@ class BacktestEngine:
             turnover = abs(w_held - w_prev)
             cost_ret = turnover * fee_slip_bps / 10000.0
             gross_ret = w_held * asset_ret
+            
+            # Funding costs (placeholder: 0.0 until funding rates are provided)
+            # Convention: positive means longs pay shorts
+            funding_cost = 0.0
+            
             cash_weight = max(0.0, 1.0 - abs(w_prev))
             cash_ret = cash_weight * rf_bar
-            net_ret = gross_ret + cash_ret - cost_ret
+            net_ret = gross_ret + cash_ret - cost_ret - funding_cost
             nav_curr = nav_prev * (1 + net_ret)
 
             prev_long = w_prev > 1e-12
@@ -153,7 +200,13 @@ class BacktestEngine:
             cash_weight_list.append(cash_weight)
             cash_ret_list.append(cash_ret)
             rf_bar_list.append(rf_bar)
+            funding_cost_list.append(funding_cost)
 
+        # Defensive check: all lists must have same length as bars (gated by strict_validation)
+        if self.cfg.engine.strict_validation:
+            assert len(funding_cost_list) == n, f"funding_cost_list has length {len(funding_cost_list)}, expected {n}"
+            assert len(nav_list) == n, f"nav_list has length {len(nav_list)}, expected {n}"
+        
         equity_df = pl.DataFrame(
             {
                 "ts": ts_list,
@@ -168,7 +221,10 @@ class BacktestEngine:
                 "cash_weight": cash_weight_list,
                 "cash_ret": cash_ret_list,
                 "rf_bar": rf_bar_list,
+                "funding_costs": funding_cost_list,
             }
+        ).with_columns(
+            cum_funding_costs=pl.col("funding_costs").fill_null(0.0).cum_sum()
         )
 
         portfolio = Portfolio(cash=self.cfg.engine.initial_cash)
@@ -196,6 +252,24 @@ class BacktestEngine:
         summary["entry_exit_events"] = entry_exit_events
         summary["cash_yield_annual"] = self.cfg.execution.cash_yield_annual
         summary["avg_cash_weight"] = float(sum(cash_weight_list)) / float(len(cash_weight_list)) if cash_weight_list else 0.0
+        summary["used_close_to_close_fallback"] = used_close_to_close_fallback
+        summary["return_mode"] = "close_to_close_fallback" if used_close_to_close_fallback else "open_to_close"
+        
+        # Funding diagnostics
+        total_funding = float(sum(funding_cost_list))
+        summary["total_funding_cost"] = total_funding
+        summary["avg_funding_cost_per_bar"] = total_funding / n if n > 0 else 0.0
+        summary["funding_convention"] = "positive_means_longs_pay"
+        
+        # Funding as % of gross PnL (with epsilon guard for zero gross)
+        gross_pnl_abs = abs(sum(gross_ret_list))
+        if gross_pnl_abs > _GROSS_PNL_EPSILON:
+            summary["funding_cost_as_pct_of_gross"] = total_funding / gross_pnl_abs
+        else:
+            summary["funding_cost_as_pct_of_gross"] = None
+        
+        summary["trade_log_mode"] = "binary_entries_exits_only"
+        summary["trade_log_note"] = "Valid for 0/1 exposure strategies; ignores partial resizes (e.g., vol targeting)."
         return portfolio, summary
 
 

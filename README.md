@@ -600,6 +600,109 @@ Registry config: `docs/research/strategy_registry_v0.json`, which defines:
 - `run_recipe` (canonical recompute commands)
 - `git_tag` (tag capturing the original run, especially for legacy/archived strategies)
 
+## MA Sweep (20–200h)
+
+Parameter robustness check for MA crossover strategies. Sweeps fast MA (20–200 hours) and slow MA (40–400 hours) over full period and subperiods (2021/2022/2023).
+
+### Setup
+
+The sweep runner requires a DuckDB path, provided via `--db` flag or `TREND_CRYPTO_DB` environment variable:
+
+```bash
+# Option 1: Use --db flag
+python scripts/sweep_ma.py --db ../data/market.duckdb --symbol BTC-USD
+
+# Option 2: Set environment variable (recommended)
+export TREND_CRYPTO_DB=../data/market.duckdb
+python scripts/sweep_ma.py --symbol BTC-USD
+```
+
+**Auto-Discovery**: The sweep runner automatically:
+- Selects the appropriate `bars_*` table based on `--timeframe` (e.g., `bars_1h` for `--timeframe 1h`)
+- Discovers start/end dates from the data (MIN/MAX of timestamp column)
+- Validates required OHLCV columns
+- Detects and reports missing funding data gracefully
+
+**Manual Overrides** (optional):
+```bash
+# Explicit table and date range
+python scripts/sweep_ma.py --table bars_1d --start 2020-01-01 --end 2024-01-01
+```
+
+### Run Sweep
+
+```bash
+# Basic sweep (BTC-USD, 1h bars)
+python scripts/sweep_ma.py \
+  --db ../data/market.duckdb \
+  --symbol BTC-USD \
+  --timeframe 1h \
+  --fee-bps 10 \
+  --slippage-bps 2 \
+  --funding-mode none
+
+# Using environment variable (recommended for multiple sweeps)
+export TREND_CRYPTO_DB=../data/market.duckdb
+python scripts/sweep_ma.py --symbol BTC-USD --timeframe 1h
+
+# Custom parameter ranges
+python scripts/sweep_ma.py \
+  --symbol BTC-USD \
+  --fast-start 30 \
+  --fast-end 100 \
+  --fast-step 5 \
+  --slow-start 60 \
+  --slow-end 200 \
+  --slow-step 10
+```
+
+### Outputs
+
+Results written to `artifacts/sweeps/ma_sweep_{timestamp}/results.csv` with columns:
+- `fast_hours`, `slow_hours` — MA window sizes in hours
+- `subperiod_name` — `full`, `2021`, `2022`, `2023`
+- `sharpe`, `max_drawdown`, `total_return` — core metrics
+- `return_mode` — `open_to_close` or `close_to_close_fallback`
+- `used_close_to_close_fallback` — True if `open` column missing
+- `total_funding_cost`, `funding_cost_as_pct_of_gross` — funding diagnostics (0.0 if funding disabled)
+
+### Selection Guidance
+
+**Favor parameters that survive 2022 (bear) and 2023 (chop), not just 2021.** 
+
+Look for:
+- Consistent positive Sharpe across all subperiods
+- Drawdowns < 30% in 2022/2023
+- Stable entry/exit frequency (avoid over-trading)
+
+### Troubleshooting
+
+**Problem**: "Multiple bars_* tables found" error
+
+**Solution**: The database contains multiple timeframes. Specify which to use:
+```bash
+# For hourly data
+python scripts/sweep_ma.py --table bars_1h --timeframe 1h
+
+# For daily data
+python scripts/sweep_ma.py --table bars_1d --timeframe 1d
+```
+
+**Problem**: "Expected timeframe=1h → table=bars_1h, but it does not exist"
+
+**Solution**: Either load hourly bars into DuckDB, or run sweep on daily timeframe:
+```bash
+# Run daily sweep instead
+python scripts/sweep_ma.py --timeframe 1d --fast-start 2 --fast-end 20 --fast-step 1 --slow-start 5 --slow-end 50 --slow-step 2
+```
+
+**Problem**: "funding_mode=column but column 'funding_rate' not found"
+
+**Solution**: Funding data not available. Switch to `--funding-mode none`:
+```bash
+python scripts/sweep_ma.py --funding-mode none
+```
+
 ## Tests
 
 ```bash
@@ -612,11 +715,55 @@ Install (dev):
 pip install -e ".[dev]"
 ```
 
+## Timing & Returns
+
+The backtest engine enforces clean-room execution timing to prevent lookahead bias:
+
+- **Signals** are decided at `Close(t)` using only data available through that bar.
+- **Trades** execute at `Open(t + execution_lag_bars)` (default lag = 1 bar).
+- **PnL attribution** uses **Model B** (open-to-close returns):
+  - When `open` column exists: `asset_ret[t] = close[t] / open[t] - 1`
+  - Position held at `t` earns the intraday return from `open[t]` → `close[t]`
+  - This correctly reflects that execution happens at open, not at the prior close.
+- **Fallback**: If `open` is missing, the engine falls back to close-to-close returns (`close[t] / close[t-1] - 1`). This is recorded in `summary["used_close_to_close_fallback"]`.
+- **No double-shift pitfall**: Positions are lagged exactly once (`target.shift(execution_lag_bars)`), and returns are computed directly without an additional shift.
+
+This model avoids the common "double shift" bug where strategies would incorrectly appear to execute instantly at the decision bar close.
+
+## Funding
+
+Perpetual futures funding rates are applied as a per-bar carry cost:
+
+```
+funding_costs[t] = position[t] * funding_rate[t]
+```
+
+**Convention**: `positive funding_rate` means **longs pay shorts** (Binance/Bybit style).
+
+**Outputs**:
+- `equity_df["funding_costs"]` — per-bar funding cost (positive = cost to longs)
+- `equity_df["cum_funding_costs"]` — cumulative funding paid/received
+- `summary["total_funding_cost"]` — total funding over the backtest period
+- `summary["avg_funding_cost_per_bar"]` — average per-bar funding
+- `summary["funding_cost_as_pct_of_gross"]` — funding as % of gross PnL (magnitude)
+- `summary["funding_convention"]` — always `"positive_means_longs_pay"`
+
+**Data integration guidance**: When adding funding rates from a new venue, verify the sign convention by checking that `cum_funding_costs` behaves as expected (e.g., longs pay when funding is positive during bull runs). If the curve is inverted, the venue may use the opposite convention.
+
 ## Notes
 
 - Bars are read from DuckDB (Parquet-backed). The example config expects a table or view containing hourly BTC-USD bars.
 - Strategies decide at bar close; orders fill at the next bar open with slippage and fees.
 - Strict validation can be enabled to verify temporal integrity and fill timing.
+
+## Release / Tagging
+
+To tag the Model B engine baseline after merge:
+
+```bash
+git tag -a engine-v1.0-model-b -m "Engine v1.0: Model B open-to-close timing + funding diagnostics"
+git push origin engine-v1.0-model-b
+```
 
 # Days with missing hours (BTCUSD):
 #(datetime.date(2025, 10, 25), 19, datetime.datetime(2025, 10, 25, 0, 0), datetime.datetime(2025, 10, 25, 23, 0))

@@ -10,9 +10,10 @@ from common.config import (
     DataConfig,
     EngineConfig,
     ExecutionConfig,
-    RiskConfig,
-    RunConfig,
-    StrategyConfig,
+    RiskConfigRaw,
+    RunConfigRaw,
+    StrategyConfigRaw,
+    compile_config,
 )
 from risk.risk_manager import RiskManager
 from strategy.base import TargetWeightStrategy
@@ -33,17 +34,24 @@ class AlwaysOne(TargetWeightStrategy):
 
 
 def _bars(close_prices) -> pl.DataFrame:
+    """
+    Create bars with realistic open prices.
+    Open[t] is set to close[t-1] (for t > 0) to match real market behavior.
+    This ensures open-to-close returns work correctly.
+    """
     start = datetime(2024, 1, 1, tzinfo=timezone.utc)
     rows = []
     for i, c in enumerate(close_prices):
         ts = start + timedelta(hours=i)
+        # Open at close of previous bar (except first bar)
+        o = close_prices[i - 1] if i > 0 else c
         rows.append(
             {
                 "ts": ts,
                 "symbol": "BTC-USD",
-                "open": c,
-                "high": c,
-                "low": c,
+                "open": o,
+                "high": max(o, c),
+                "low": min(o, c),
                 "close": c,
                 "volume": 1_000,
             }
@@ -53,16 +61,17 @@ def _bars(close_prices) -> pl.DataFrame:
 
 def test_no_lookahead_and_costs():
     bars = _bars([100, 110, 121])
-    cfg = RunConfig(
+    raw_cfg = RunConfigRaw(
         run_name="test",
         data=DataConfig(db_path=":memory:", table="bars", symbol="BTC-USD", start=bars[0, "ts"], end=bars[bars.height - 1, "ts"], timeframe="1h"),
         engine=EngineConfig(strict_validation=True, lookback=5, initial_cash=1000.0),
-        strategy=StrategyConfig(fast=2, slow=3, vol_window=2, k=2.0, min_band=0.0, window_units="bars"),
-        risk=RiskConfig(vol_window=2, target_vol_annual=None, max_weight=1.0, window_units="bars"),
+        strategy=StrategyConfigRaw(fast=2, slow=3, vol_window=2, k=2.0, min_band=0.0, window_units="bars"),
+        risk=RiskConfigRaw(vol_window=2, target_vol_annual=None, max_weight=1.0, window_units="bars"),
         execution=ExecutionConfig(fee_bps=10.0, slippage_bps=0.0, execution_lag_bars=1),
     )
+    cfg = compile_config(raw_cfg)
 
-    engine = BacktestEngine(cfg, AlwaysOne(), RiskManager(cfg.risk, periods_per_year=8760), DummyPortal(bars))
+    engine = BacktestEngine(cfg, AlwaysOne(), RiskManager(cfg.risk, periods_per_year=cfg.annualization_factor), DummyPortal(bars))
     portfolio, _ = engine.run()
     eq = portfolio.to_frames()["equity"].sort("ts")
 
@@ -84,16 +93,17 @@ def test_no_lookahead_and_costs():
 
 def test_execution_lag_shift():
     bars = _bars([100, 110, 121, 133.1])  # three returns of 10%
-    cfg = RunConfig(
+    raw_cfg = RunConfigRaw(
         run_name="test_lag",
         data=DataConfig(db_path=":memory:", table="bars", symbol="BTC-USD", start=bars[0, "ts"], end=bars[bars.height - 1, "ts"], timeframe="1h"),
         engine=EngineConfig(strict_validation=True, lookback=5, initial_cash=1000.0),
-        strategy=StrategyConfig(fast=2, slow=3, vol_window=2, k=2.0, min_band=0.0, window_units="bars"),
-        risk=RiskConfig(vol_window=2, target_vol_annual=None, max_weight=1.0, window_units="bars"),
+        strategy=StrategyConfigRaw(fast=2, slow=3, vol_window=2, k=2.0, min_band=0.0, window_units="bars"),
+        risk=RiskConfigRaw(vol_window=2, target_vol_annual=None, max_weight=1.0, window_units="bars"),
         execution=ExecutionConfig(fee_bps=0.0, slippage_bps=0.0, execution_lag_bars=2),
     )
+    cfg = compile_config(raw_cfg)
 
-    engine = BacktestEngine(cfg, AlwaysOne(), RiskManager(cfg.risk, periods_per_year=8760), DummyPortal(bars))
+    engine = BacktestEngine(cfg, AlwaysOne(), RiskManager(cfg.risk, periods_per_year=cfg.annualization_factor), DummyPortal(bars))
     portfolio, _ = engine.run()
     eq = portfolio.to_frames()["equity"].sort("ts")
 

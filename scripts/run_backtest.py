@@ -6,12 +6,11 @@ from pathlib import Path
 
 from backtest.engine import BacktestEngine
 from common.config import (
-    RunConfig,
+    compile_config,
     load_config_from_yaml,
     make_run_id,
     write_manifest,
 )
-from common.timeframe import hours_per_bar, periods_per_year_from_timeframe
 from data.portal import DataPortal
 from risk.risk_manager import RiskManager
 from strategy.ma_cross_vol_hysteresis import MACrossVolHysteresis
@@ -27,28 +26,15 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    cfg: RunConfig = load_config_from_yaml(args.config)
-
-    bar_hours = hours_per_bar(cfg.data.timeframe)
-    ppy = periods_per_year_from_timeframe(cfg.data.timeframe)
-
-    # Scale strategy windows if provided in hours
-    if cfg.strategy.mode != "buy_and_hold" and cfg.strategy.window_units == "hours":
-        orig_fast = cfg.strategy.fast
-        orig_slow = cfg.strategy.slow
-        orig_vol = cfg.strategy.vol_window
-        cfg.strategy.fast = max(1, round(orig_fast / bar_hours))
-        cfg.strategy.slow = max(cfg.strategy.fast + 1, round(orig_slow / bar_hours))
-        if orig_vol is not None:
-            cfg.strategy.vol_window = max(2, round(orig_vol / bar_hours))
-    if cfg.risk.window_units == "hours":
-        orig_risk_vol = cfg.risk.vol_window
-        cfg.risk.vol_window = max(2, round(orig_risk_vol / bar_hours))
+    raw_cfg = load_config_from_yaml(args.config)
+    cfg = compile_config(raw_cfg)
 
     print(
-        f"tf={cfg.data.timeframe} bar_hours={bar_hours:.4f} ppy={ppy:.2f} "
+        f"tf={cfg.data.timeframe} bar_hours={cfg.bar_hours:.4f} "
+        f"annualization_factor={cfg.annualization_factor:.2f} "
         f"fast={cfg.strategy.fast} slow={cfg.strategy.slow} vol_window={cfg.strategy.vol_window} "
-        f"risk_vol_window={cfg.risk.vol_window}"
+        f"risk_vol_window={cfg.risk.vol_window} "
+        f"config_hash={cfg.compute_hash()}"
     )
 
     run_id = make_run_id(cfg.run_name)
@@ -73,7 +59,7 @@ def main() -> None:
         )
     else:
         strategy = MACrossVolHysteresis(cfg.strategy)
-    risk_manager = RiskManager(cfg.risk, ppy)
+    risk_manager = RiskManager(cfg.risk, cfg.annualization_factor)
     engine = BacktestEngine(cfg, strategy, risk_manager, data_portal)
 
     portfolio, summary = engine.run()
