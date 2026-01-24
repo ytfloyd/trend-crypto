@@ -7,6 +7,7 @@ from typing import Optional
 
 import duckdb
 
+from common.timeframe import timeframe_to_seconds
 
 def normalize_timeframe(timeframe: str) -> str:
     """
@@ -260,6 +261,75 @@ def infer_start_end(
             end_ts = datetime.fromisoformat(str(end_ts)).replace(tzinfo=timezone.utc)
         
         return start_ts, end_ts
+    finally:
+        conn.close()
+
+
+def infer_native_timeframe(
+    db_path: str,
+    table: str,
+    symbol: str,
+    ts_col: str = "ts",
+    timeframe_col: Optional[str] = None,
+    timeframe_val: Optional[str] = None,
+    sample_limit: int = 200,
+) -> str:
+    """
+    Infer native timeframe by sampling timestamp deltas.
+
+    Returns a canonical timeframe string (e.g., "1m", "5m", "1h", "1d").
+    """
+    conn = duckdb.connect(db_path, read_only=True)
+    try:
+        if timeframe_col and timeframe_val:
+            query = f"""
+                SELECT {ts_col}
+                FROM {table}
+                WHERE symbol = ? AND {timeframe_col} = ?
+                ORDER BY {ts_col} ASC
+                LIMIT {sample_limit}
+            """
+            params = [symbol, timeframe_val]
+        else:
+            query = f"""
+                SELECT {ts_col}
+                FROM {table}
+                WHERE symbol = ?
+                ORDER BY {ts_col} ASC
+                LIMIT {sample_limit}
+            """
+            params = [symbol]
+
+        rows = conn.execute(query, params).fetchall()
+        if len(rows) < 2:
+            raise ValueError(f"Insufficient rows to infer native timeframe for {symbol} in {table}")
+
+        # Compute median delta in seconds
+        ts_list = [r[0] for r in rows]
+        deltas = []
+        for i in range(1, len(ts_list)):
+            dt = ts_list[i] - ts_list[i - 1]
+            deltas.append(int(dt.total_seconds()))
+        deltas.sort()
+        median = deltas[len(deltas) // 2]
+
+        if median <= 0:
+            raise ValueError(f"Invalid timestamp deltas for {symbol} in {table}")
+
+        # Convert to canonical timeframe string
+        if median % 60 != 0:
+            raise ValueError(f"Non-minute native interval ({median}s) for {symbol} in {table}")
+        minutes = median // 60
+        if minutes < 60:
+            return f"{minutes}m"
+        if minutes % 60 == 0:
+            hours = minutes // 60
+            if hours < 24:
+                return f"{hours}h"
+            if hours % 24 == 0:
+                days = hours // 24
+                return f"{days}d"
+        return f"{minutes}m"
     finally:
         conn.close()
 

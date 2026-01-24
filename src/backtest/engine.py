@@ -282,6 +282,8 @@ def _summary_stats(equity: pl.DataFrame) -> dict:
     start_nav = nav.item(0)
     end_nav = nav.item(nav.len() - 1)
     total_return = (end_nav / start_nav) - 1 if start_nav else 0.0
+    total_return_pct = total_return * 100.0
+    total_return_multiple = 1.0 + total_return
     diffs = equity.select(pl.col("ts").diff().dt.total_seconds()).to_series().drop_nulls()
     dt_seconds = diffs.median() if diffs.len() > 0 else 0
     periods_per_year = (365 * 24 * 3600 / dt_seconds) if dt_seconds and dt_seconds > 0 else 8760
@@ -296,6 +298,9 @@ def _summary_stats(equity: pl.DataFrame) -> dict:
     max_drawdown = drawdowns.min()
     return {
         "total_return": total_return,
+        "total_return_decimal": total_return,
+        "total_return_pct": total_return_pct,
+        "total_return_multiple": total_return_multiple,
         "sharpe": sharpe,
         "max_drawdown": max_drawdown,
     }

@@ -66,7 +66,7 @@ def test_no_lookahead_and_costs():
         data=DataConfig(db_path=":memory:", table="bars", symbol="BTC-USD", start=bars[0, "ts"], end=bars[bars.height - 1, "ts"], timeframe="1h"),
         engine=EngineConfig(strict_validation=True, lookback=5, initial_cash=1000.0),
         strategy=StrategyConfigRaw(fast=2, slow=3, vol_window=2, k=2.0, min_band=0.0, window_units="bars"),
-        risk=RiskConfigRaw(vol_window=2, target_vol_annual=None, max_weight=1.0, window_units="bars"),
+        risk=RiskConfigRaw(vol_window=5, target_vol_annual=None, max_weight=1.0, window_units="bars"),
         execution=ExecutionConfig(fee_bps=10.0, slippage_bps=0.0, execution_lag_bars=1),
     )
     cfg = compile_config(raw_cfg)
@@ -98,7 +98,7 @@ def test_execution_lag_shift():
         data=DataConfig(db_path=":memory:", table="bars", symbol="BTC-USD", start=bars[0, "ts"], end=bars[bars.height - 1, "ts"], timeframe="1h"),
         engine=EngineConfig(strict_validation=True, lookback=5, initial_cash=1000.0),
         strategy=StrategyConfigRaw(fast=2, slow=3, vol_window=2, k=2.0, min_band=0.0, window_units="bars"),
-        risk=RiskConfigRaw(vol_window=2, target_vol_annual=None, max_weight=1.0, window_units="bars"),
+        risk=RiskConfigRaw(vol_window=5, target_vol_annual=None, max_weight=1.0, window_units="bars"),
         execution=ExecutionConfig(fee_bps=0.0, slippage_bps=0.0, execution_lag_bars=2),
     )
     cfg = compile_config(raw_cfg)

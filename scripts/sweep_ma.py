@@ -391,7 +391,7 @@ def main() -> None:
                     fast_bars = cfg.strategy.fast
                     slow_bars = cfg.strategy.slow
                     
-                    data_portal = DataPortal(cfg.data)
+                    data_portal = DataPortal(cfg.data, strict_validation=cfg.engine.strict_validation)
                     strategy = MACrossoverLongOnlyStrategy(
                         fast=fast_bars,
                         slow=slow_bars,

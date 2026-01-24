@@ -21,10 +21,11 @@ strategy:
   weight_on: 1.0
 
 risk:
-  vol_window: 1
+  # 30-day risk window (hours), compiled to bars by compiler
+  vol_window: 720
   target_vol_annual: null
   max_weight: 1.0
-  window_units: "bars"
+  window_units: "hours"
 
 execution:
   fee_bps: 0.0
