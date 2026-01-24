@@ -64,7 +64,7 @@ def test_temporal_and_fill_timing():
         ),
         engine=EngineConfig(strict_validation=True, lookback=10, initial_cash=1000.0),
         strategy=StrategyConfigRaw(fast=2, slow=3, vol_window=2, k=2.0, min_band=0.0),
-        risk=RiskConfigRaw(vol_window=2, target_vol_annual=1.0, max_weight=1.0),
+        risk=RiskConfigRaw(vol_window=5, target_vol_annual=1.0, max_weight=1.0),
         execution=ExecutionConfig(),
     )
     cfg = compile_config(raw_cfg)

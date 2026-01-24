@@ -730,6 +730,21 @@ The backtest engine enforces clean-room execution timing to prevent lookahead bi
 
 This model avoids the common "double shift" bug where strategies would incorrectly appear to execute instantly at the decision bar close.
 
+**Return metrics in `summary.json` are explicit**:
+- `total_return_decimal`: decimal return (e.g., 1.23 = +123%)
+- `total_return_pct`: percent return (decimal * 100)
+- `total_return_multiple`: multiple (1 + decimal), e.g., 2.23x
+- `total_return`: retained for backward compatibility and equals `total_return_decimal`
+
+## Data Resampling
+
+- `data.timeframe` is the **requested** timeframe; `data.native_timeframe` (optional) is the **native** source cadence.
+- Requested timeframe must be an **integer multiple** of native (e.g., 1m→1h, 1m→1d).
+- OHLCV aggregation: open=first, high=max, low=min, close=last, volume=sum.
+- Funding aggregation: `funding_rate` uses mean; `funding_cost` uses sum.
+- Incomplete bucket policy: drop first/last bucket when coverage < `min_bucket_coverage_frac` (default 0.8).
+- Manifest records requested/native timeframe, resampling rule, coverage, and drop flags.
+
 ## Funding
 
 Perpetual futures funding rates are applied as a per-bar carry cost:

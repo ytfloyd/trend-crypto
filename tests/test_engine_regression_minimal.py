@@ -65,7 +65,7 @@ def test_engine_regression_minimal_buy_and_hold():
         ),
         engine=EngineConfig(strict_validation=True, lookback=5, initial_cash=1000.0),
         strategy=StrategyConfigRaw(mode="buy_and_hold", weight_on=1.0, window_units="hours"),
-        risk=RiskConfigRaw(vol_window=2, target_vol_annual=None, max_weight=1.0, window_units="hours"),
+        risk=RiskConfigRaw(vol_window=5, target_vol_annual=None, max_weight=1.0, window_units="hours"),
         execution=ExecutionConfig(fee_bps=0.0, slippage_bps=0.0, execution_lag_bars=1),
     )
 
@@ -99,3 +99,7 @@ def test_engine_regression_minimal_buy_and_hold():
     # Check gross return for first invested bar (t=1)
     gross_ret_t1 = equity["gross_ret"][1]
     assert gross_ret_t1 == pytest.approx(0.01, rel=1e-6)
+
+    # Summary return semantics
+    assert summary["total_return_multiple"] == pytest.approx(1.0 + summary["total_return_decimal"], rel=1e-12)
+    assert summary["total_return_pct"] == pytest.approx(100.0 * summary["total_return_decimal"], rel=1e-12)

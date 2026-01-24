@@ -17,11 +17,14 @@ from .timeframe import hours_per_bar
 class DataConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     db_path: str
-    table: str = "bars"
+    table: Optional[str] = None
     symbol: str = "BTC-USD"
     start: datetime
     end: datetime
     timeframe: str = "1h"
+    native_timeframe: Optional[str] = None
+    drop_incomplete_bars: bool = True
+    min_bucket_coverage_frac: float = 0.8
 
 
 class EngineConfig(BaseModel):
@@ -269,6 +272,16 @@ def compile_config(raw: RunConfigRaw) -> RunConfigResolved:
         window_units="bars",
     )
 
+    # Safety: enforce minimum effective risk vol window in strict mode
+    if raw.engine.strict_validation and risk_resolved.vol_window < 5:
+        raise ValueError(
+            "risk.vol_window resolves to <5 bars; increase risk.vol_window (hours) for this timeframe."
+        )
+    if not raw.engine.strict_validation and risk_resolved.vol_window < 5:
+        print(
+            "Warning: risk.vol_window resolves to <5 bars; increase risk.vol_window (hours) for this timeframe."
+        )
+
     return RunConfigResolved(
         run_name=raw.run_name,
         data=raw.data,
@@ -315,6 +328,7 @@ def write_manifest(
     *,
     bars_start: datetime,
     bars_end: datetime,
+    data_provenance: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     run_dir.mkdir(parents=True, exist_ok=True)
     cfg_dict = cfg.to_resolved_dict()
@@ -324,6 +338,7 @@ def write_manifest(
         "git_hash": get_git_hash(),
         "params": cfg_dict,
         "raw": cfg.raw.to_dict(),
+        "data_provenance": data_provenance or {},
         "time_range": {"start": bars_start.isoformat(), "end": bars_end.isoformat()},
         "symbol": cfg.data.symbol,
         "generated_at": datetime.now(timezone.utc).isoformat(),
