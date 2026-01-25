@@ -69,11 +69,17 @@ class BacktestEngine:
         strategy: TargetWeightStrategy,
         risk_manager: RiskManager,
         data_portal: DataPortal,
+        use_dynamic_slippage: bool = False,
+        aum_usd: float | None = None,
+        impact_coeff: float = 0.1,
     ) -> None:
         self.cfg = cfg
         self.strategy = strategy
         self.risk_manager = risk_manager
         self.data_portal = data_portal
+        self.use_dynamic_slippage = use_dynamic_slippage
+        self.aum_usd = aum_usd
+        self.impact_coeff = impact_coeff
 
     def run(self) -> tuple[Portfolio, dict]:
         bars = self.data_portal.load_bars()
@@ -105,9 +111,9 @@ class BacktestEngine:
 
         lag = max(1, self.cfg.execution.execution_lag_bars)
         fee_slip_bps = (self.cfg.execution.fee_bps or 0.0) + (self.cfg.execution.slippage_bps or 0.0)
-        use_dynamic_slippage = bool(self.cfg.execution.use_dynamic_slippage)
-        aum_usd = float(self.cfg.execution.aum_usd or 0.0)
-        impact_coeff = float(self.cfg.execution.impact_coeff or 0.1)
+        use_dynamic_slippage = bool(getattr(self, "use_dynamic_slippage", False))
+        aum_usd = float(getattr(self, "aum_usd", 0.0) or 0.0)
+        impact_coeff = float(getattr(self, "impact_coeff", 0.1) or 0.1)
 
         # Compute asset returns (open-to-close default, Model B)
         asset_ret_list, used_close_to_close_fallback = compute_asset_returns(bars, mode="open_to_close")
@@ -186,7 +192,7 @@ class BacktestEngine:
             if turnover > 0:
                 trade_count += 1
             # Conservative / 100% Taker Execution Assumption — entries and exits modeled as taker flow.
-            trade_size_usd = abs(w_held - w_prev) * aum_usd if use_dynamic_slippage else 0.0
+            trade_size_usd = abs(w_held - w_prev) * aum_usd if use_dynamic_slippage and aum_usd > 0 else 0.0
             impact_bps = 0.0
             if use_dynamic_slippage and trade_size_usd > 0.0:
                 impact_bps = compute_impact_bps(

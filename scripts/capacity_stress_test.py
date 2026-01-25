@@ -41,13 +41,6 @@ def main() -> None:
             raw_cfg = raw_base.model_copy(
                 update={
                     "data": raw_base.data.model_copy(update={"symbol": asset}),
-                    "execution": raw_base.execution.model_copy(
-                        update={
-                            "use_dynamic_slippage": True,
-                            "aum_usd": aum,
-                            "impact_coeff": args.impact_coeff,
-                        }
-                    ),
                 }
             )
             cfg = compile_config(raw_cfg)
@@ -75,6 +68,9 @@ def main() -> None:
                 strategy,
                 RiskManager(cfg.risk, periods_per_year=cfg.annualization_factor),
                 portal,
+                use_dynamic_slippage=True,
+                aum_usd=aum,
+                impact_coeff=args.impact_coeff,
             )
             bars = portal.load_bars()
             _, summary = engine.run()
