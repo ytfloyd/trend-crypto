@@ -11,6 +11,7 @@ from data.portal import DataPortal
 from strategy.context import make_strategy_context
 from strategy.base import TargetWeightStrategy
 from risk.risk_manager import RiskManager
+from backtest.impact import compute_impact_bps, _rolling_volatility, _volume_usd
 
 
 # Epsilon for near-zero gross PnL checks (funding cost as % of gross)
@@ -104,11 +105,19 @@ class BacktestEngine:
 
         lag = max(1, self.cfg.execution.execution_lag_bars)
         fee_slip_bps = (self.cfg.execution.fee_bps or 0.0) + (self.cfg.execution.slippage_bps or 0.0)
+        use_dynamic_slippage = bool(self.cfg.execution.use_dynamic_slippage)
+        aum_usd = float(self.cfg.execution.aum_usd or 0.0)
+        impact_coeff = float(self.cfg.execution.impact_coeff or 0.1)
 
         # Compute asset returns (open-to-close default, Model B)
         asset_ret_list, used_close_to_close_fallback = compute_asset_returns(bars, mode="open_to_close")
         
         ts_list = bars["ts"].to_list()
+        open_prices = bars["open"].to_list()
+        close_prices = bars["close"].to_list()
+        vol_series = _rolling_volatility(bars, window=24)
+        volume_usd_series = _volume_usd(bars)
+        impact_bps_list = [0.0] * n
         nav_list = []
         gross_ret_list = []
         net_ret_list = []
@@ -116,6 +125,7 @@ class BacktestEngine:
         cost_ret_list = []
         w_held_list = []
         entry_exit_events = 0
+        trade_count = 0
         dd_list = []
         dd_scaler_list = []
         cash_weight_list = []
@@ -173,8 +183,28 @@ class BacktestEngine:
                     delta = max(min(delta, step), -step)
                 w_held = w_prev + delta
             turnover = abs(w_held - w_prev)
-            cost_ret = turnover * fee_slip_bps / 10000.0
-            gross_ret = w_held * asset_ret
+            if turnover > 0:
+                trade_count += 1
+            # Conservative / 100% Taker Execution Assumption — entries and exits modeled as taker flow.
+            trade_size_usd = abs(w_held - w_prev) * aum_usd if use_dynamic_slippage else 0.0
+            impact_bps = 0.0
+            if use_dynamic_slippage and trade_size_usd > 0.0:
+                impact_bps = compute_impact_bps(
+                    volatility=vol_series[t],
+                    trade_size_usd=trade_size_usd,
+                    volume_usd=volume_usd_series[t],
+                    impact_coeff=impact_coeff,
+                )
+            impact_bps_list[t] = impact_bps
+            cost_ret = turnover * (fee_slip_bps / 10000.0)
+
+            # Apply impact at execution only (Model B)
+            asset_ret_effective = asset_ret
+            if impact_bps > 0.0:
+                impact_decimal = impact_bps / 10000.0
+                effective_open = open_prices[t] * (1 + math.copysign(impact_decimal, w_held - w_prev))
+                asset_ret_effective = close_prices[t] / effective_open - 1.0
+            gross_ret = w_held * asset_ret_effective
             
             # Funding costs (placeholder: 0.0 until funding rates are provided)
             # Convention: positive means longs pay shorts
@@ -254,6 +284,7 @@ class BacktestEngine:
         summary["avg_cash_weight"] = float(sum(cash_weight_list)) / float(len(cash_weight_list)) if cash_weight_list else 0.0
         summary["used_close_to_close_fallback"] = used_close_to_close_fallback
         summary["return_mode"] = "close_to_close_fallback" if used_close_to_close_fallback else "open_to_close"
+        summary["trade_count"] = trade_count
         
         # Funding diagnostics
         total_funding = float(sum(funding_cost_list))
@@ -268,6 +299,19 @@ class BacktestEngine:
         else:
             summary["funding_cost_as_pct_of_gross"] = None
         
+        # Impact diagnostics
+        trade_impacts = [b for b in impact_bps_list if b > 0.0]
+        if trade_impacts:
+            trade_impacts_sorted = sorted(trade_impacts)
+            p99_index = max(0, int(round(0.99 * (len(trade_impacts_sorted) - 1))))
+            summary["avg_impact_bps"] = sum(trade_impacts) / len(trade_impacts)
+            summary["max_impact_bps"] = max(trade_impacts)
+            summary["p99_impact_bps"] = trade_impacts_sorted[p99_index]
+        else:
+            summary["avg_impact_bps"] = 0.0
+            summary["max_impact_bps"] = 0.0
+            summary["p99_impact_bps"] = 0.0
+
         summary["trade_log_mode"] = "binary_entries_exits_only"
         summary["trade_log_note"] = "Valid for 0/1 exposure strategies; ignores partial resizes (e.g., vol targeting)."
         return portfolio, summary
