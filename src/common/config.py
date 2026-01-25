@@ -152,6 +152,9 @@ class ExecutionConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     fee_bps: float = 0.0
     slippage_bps: float = 0.0
+    use_dynamic_slippage: bool = False
+    aum_usd: Optional[float] = None
+    impact_coeff: float = 0.1
     min_trade_notional: float = 0.0
     weight_deadband: float = 0.0
     min_rebalance_notional: float = 0.0
