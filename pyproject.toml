@@ -21,6 +21,12 @@ dev = [
   "pytest>=8.0.0",
   "ruff>=0.5.0",
   "reportlab>=4.0.0",
+  "jsonschema>=4.0.0",
+  "numpy>=1.26.0",
+  "pandas>=2.2.0",
+  "duckdb>=0.10",
+  "polars>=0.20",
+  "pyarrow>=14",
 ]
 
 [tool.setuptools.packages.find]
