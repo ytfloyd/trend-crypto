@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest jsonschema pyyaml "pydantic>=2" numpy pandas matplotlib
+          python -m pip install -e ".[dev]"
 
       - name: Validate strategy registry
         run: python scripts/research/strategy_registry_v0.py validate
