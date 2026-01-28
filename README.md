@@ -172,6 +172,42 @@ Compute ensemble metrics:
 
     python scripts/research/alphas101_metrics_v0.py
 
+## Research (Formulaic Alpha Engine v0)
+
+Run the formulaic alpha factory from `alphas.txt`:
+
+```bash
+python scripts/run_alpha_factory.py --db ../data/market.duckdb --table bars_1d_usd_universe_clean_adv10m
+```
+
+If the ADV10m view is missing, `run_alpha_factory.py` can fall back to `bars_1d_clean`.
+Use `--allow-fallback` or create the view via:
+`python scripts/research/create_usd_universe_adv10m_view.py --db <db>`.
+
+Generate an institutional tearsheet for a single alpha:
+
+```bash
+python scripts/generate_alpha_tearsheet.py \
+  --alphas artifacts/research/formulaic_alphas/alphas_formulaic_v0.parquet \
+  --alpha alpha_001 \
+  --db ../data/market.duckdb \
+  --price_table bars_1d_clean \
+  --output artifacts/research/formulaic_alphas/tearsheets/alpha_001
+```
+
+## Research (Survivor Protocol — full universe)
+
+One-command run against `bars_1d_clean`:
+
+```bash
+python scripts/run_survivor_protocol_universe.py \
+  --db /path/to/market.duckdb \
+  --price_table bars_1d_clean \
+  --start 2023-01-01 \
+  --end 2024-12-31 \
+  --out_dir artifacts/research/101_alphas/tearsheets_v0
+```
+
 ### Phase 3: Beta / IC decay / capacity checks (101_alphas)
 
 From repo root:
