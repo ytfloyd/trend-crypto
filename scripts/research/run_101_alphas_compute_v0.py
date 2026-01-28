@@ -52,6 +52,12 @@ def load_prices(
     con = duckdb.connect(str(db_path))
     con.execute("SET TimeZone='UTC';")
 
+    cols = con.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = ?",
+        [table],
+    ).fetchall()
+    has_vwap = any(row[0].lower() == "vwap" for row in cols)
+
     where = []
     params = []
     if start:
@@ -62,13 +68,9 @@ def load_prices(
         params.append(end)
     where_clause = f"WHERE {' AND '.join(where)}" if where else ""
 
+    vwap_select = "vwap" if has_vwap else "CAST(NULL AS DOUBLE) AS vwap"
     query = f"""
-        SELECT ts, symbol, open, high, low, close, volume,
-               CASE
-                 WHEN 'vwap' IN (SELECT column_name FROM information_schema.columns WHERE table_name = '{table}')
-                 THEN vwap
-                 ELSE NULL
-               END AS vwap
+        SELECT ts, symbol, open, high, low, close, volume, {vwap_select}
         FROM {table}
         {where_clause}
         ORDER BY ts, symbol;
