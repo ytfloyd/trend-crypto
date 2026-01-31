@@ -9,13 +9,13 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
-from scripts.research.run_manifest_v0 import (
+from run_manifest_v0 import (
     build_base_manifest,
     fingerprint_file,
     hash_config_blob,
     write_run_manifest,
 )
-from scripts.research.transtrend_crypto_lib_v0 import (
+from transtrend_crypto_lib_v0 import (
     HorizonSpec,
     TranstrendConfig,
     build_target_weights,
