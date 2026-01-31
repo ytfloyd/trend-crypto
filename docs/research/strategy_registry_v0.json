@@ -184,6 +184,29 @@
         "python - <<'PY'\\n# metrics from manifest + summary\\nimport json, pathlib as p, pandas as pd\\nrun=p.Path('artifacts/research/ma_5_40_btc_eth_baseline_v0/eth_usd')\\nmanifest=json.loads((run/'manifest.json').read_text())\\nsummary=json.loads((run/'summary.json').read_text())\\nrow={\\n    'symbol': manifest.get('symbol'),\\n    'start': manifest['time_range']['start'],\\n    'end': manifest['time_range']['end'],\\n    'total_return': summary.get('total_return'),\\n    'sharpe': summary.get('sharpe'),\\n    'max_drawdown': summary.get('max_drawdown'),\\n    'entry_exit_events': summary.get('entry_exit_events', 0),\\n    'avg_cash_weight': summary.get('avg_cash_weight'),\\n    'cash_yield_annual': summary.get('cash_yield_annual', 0.0),\\n    'config_hash': manifest.get('config_hash'),\\n    'git_hash': manifest.get('git_hash'),\\n    'generated_at': manifest.get('generated_at'),\\n    'equity_csv': str(run/'equity.csv'),\\n    'positions_csv': str(run/'positions.csv'),\\n    'trades_csv': str(run/'trades.csv'),\\n}\\npd.DataFrame([row]).to_csv(run/'metrics_ma_5_40_baseline_v0.csv', index=False)\\nPY",
         "venv_trend_crypto/bin/python scripts/research/ma_baseline_tearsheet_v0.py --research_dir artifacts/research/ma_5_40_btc_eth_baseline_v0/eth_usd --equity_csv artifacts/research/ma_5_40_btc_eth_baseline_v0/eth_usd/equity.csv --metrics_csv artifacts/research/ma_5_40_btc_eth_baseline_v0/eth_usd/metrics_ma_5_40_baseline_v0.csv --out_pdf artifacts/research/ma_5_40_btc_eth_baseline_v0/eth_usd/ma_5_40_eth_usd_baseline_v0.pdf"
       ]
+    },
+    {
+      "id": "transtrend_crypto_v0_spot",
+      "name": "Transtrend-style Crypto Trend v0 (Spot, Long-Only)",
+      "family": "transtrend_crypto",
+      "version": "v0",
+      "status": "experiment",
+      "universe": "bars_1d_usd_universe_clean_adv10m",
+      "equity_csv": "artifacts/research/transtrend_crypto_v0/equity.csv",
+      "metrics_csv": "artifacts/research/transtrend_crypto_v0/metrics_transtrend_crypto_v0.csv",
+      "metrics_period": "full",
+      "tearsheet_pdf": "artifacts/research/transtrend_crypto_v0/transtrend_crypto_tearsheet_v0.pdf",
+      "canonical_period": {
+        "start": "2017-03-10",
+        "end": "2024-12-31"
+      },
+      "git_tag": null,
+      "note_md": "docs/research/transtrend_crypto_overview_v0.md",
+      "run_recipe": [
+        "python scripts/research/run_transtrend_crypto_v0.py --db ../data/coinbase_daily_121025.duckdb --table bars_1d_usd_universe_clean_adv10m --start 2017-01-01 --end 2025-01-01 --out_dir artifacts/research/transtrend_crypto_v0 --target_vol_annual 0.20 --danger_gross 0.25 --cost_bps 20 --cash_yield_annual 0.04",
+        "python scripts/research/transtrend_crypto_metrics_v0.py --equity artifacts/research/transtrend_crypto_v0/equity.csv --out artifacts/research/transtrend_crypto_v0/metrics_transtrend_crypto_v0.csv",
+        "python scripts/research/transtrend_crypto_tearsheet_v0.py --research_dir artifacts/research/transtrend_crypto_v0 --out_pdf artifacts/research/transtrend_crypto_v0/transtrend_crypto_tearsheet_v0.pdf"
+      ]
     }
   ]
 }
