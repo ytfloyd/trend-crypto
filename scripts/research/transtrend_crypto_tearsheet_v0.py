@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import pandas as pd
+
 import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
@@ -45,6 +47,12 @@ def main() -> None:
     else:
         strat_eq = load_equity_csv(str(equity_path))
         strategy_stats = load_strategy_stats_from_metrics(str(metrics_path))
+
+    # Normalize to daily dates if index is daily at a fixed hour (e.g., 16:00:00)
+    if isinstance(strat_eq.index, pd.DatetimeIndex):
+        idx = strat_eq.index
+        if (idx.minute == 0).all() and (idx.second == 0).all() and idx.hour.nunique() == 1:
+            strat_eq.index = strat_eq.index.normalize()
 
     benchmark_eq = None
     benchmark_label = None
