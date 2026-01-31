@@ -51,8 +51,10 @@ def main() -> None:
     # Normalize to daily dates if index is daily at a fixed hour (e.g., 16:00:00)
     if isinstance(strat_eq.index, pd.DatetimeIndex):
         idx = strat_eq.index
-        if (idx.minute == 0).all() and (idx.second == 0).all() and idx.hour.nunique() == 1:
-            strat_eq.index = strat_eq.index.normalize()
+        hours = set(idx.hour.tolist())
+        if (idx.minute == 0).all() and (idx.second == 0).all():
+            if len(hours) <= 2 and hours.issubset({0, 16, 17}) and hours != {0}:
+                strat_eq.index = strat_eq.index.normalize()
 
     benchmark_eq = None
     benchmark_label = None
