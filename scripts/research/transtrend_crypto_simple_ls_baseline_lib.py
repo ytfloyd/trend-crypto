@@ -40,6 +40,19 @@ class SimpleLSBaselineConfig:
     execution_lag_bars: int = 1
 
 
+def _ensure_symbol_ts_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if "symbol" in df.columns and "ts" in df.columns:
+        return df
+    if isinstance(df.index, pd.MultiIndex) and len(df.index.levels) == 2:
+        df2 = df.reset_index()
+        cols = list(df2.columns)
+        cols[0] = "symbol"
+        cols[1] = "ts"
+        df2.columns = cols
+        return df2
+    raise ValueError("Expected columns ['symbol','ts'] or a 2-level MultiIndex.")
+
+
 def load_panel(db_path: str, table: str, start: str, end: str) -> pd.DataFrame:
     symbol_list = ",".join([f"'{s}'" for s in UNIVERSE])
     con = duckdb.connect(db_path, read_only=True)
@@ -68,7 +81,7 @@ def load_panel(db_path: str, table: str, start: str, end: str) -> pd.DataFrame:
 
 
 def compute_signals(panel: pd.DataFrame, fast: int, slow: int) -> pd.DataFrame:
-    df = panel.copy().sort_values(["symbol", "ts"])
+    df = _ensure_symbol_ts_columns(panel).copy().sort_values(["symbol", "ts"])
 
     def _per_symbol(group: pd.DataFrame) -> pd.DataFrame:
         close = group["close"]
@@ -84,7 +97,7 @@ def compute_signals(panel: pd.DataFrame, fast: int, slow: int) -> pd.DataFrame:
 
 
 def build_equal_weights(panel_with_signal: pd.DataFrame) -> pd.DataFrame:
-    df = panel_with_signal.copy()
+    df = _ensure_symbol_ts_columns(panel_with_signal).copy()
     if "signal" not in df.columns:
         raise ValueError("signal column missing; run compute_signals first")
 
@@ -114,7 +127,8 @@ def simulate_portfolio(
     if cfg.execution_lag_bars < 1:
         raise ValueError("execution_lag_bars must be >= 1")
 
-    df = panel.copy().sort_values(["ts", "symbol"])
+    df = _ensure_symbol_ts_columns(panel).copy().sort_values(["ts", "symbol"])
+    weights_signal = _ensure_symbol_ts_columns(weights_signal).copy()
     ret = df.copy()
     ret["ret_oc"] = ret["close"] / ret["open"] - 1.0
     returns_wide = ret.pivot(index="ts", columns="symbol", values="ret_oc").sort_index()

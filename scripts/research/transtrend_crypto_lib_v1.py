@@ -44,13 +44,26 @@ class TranstrendConfigV1:
         return cfg
 
 
+def _ensure_symbol_ts_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if "symbol" in df.columns and "ts" in df.columns:
+        return df
+    if isinstance(df.index, pd.MultiIndex) and len(df.index.levels) == 2:
+        df2 = df.reset_index()
+        cols = list(df2.columns)
+        cols[0] = "symbol"
+        cols[1] = "ts"
+        df2.columns = cols
+        return df2
+    raise ValueError("Expected columns ['symbol','ts'] or a 2-level MultiIndex.")
+
+
 def _annualize_vol(series: pd.Series, window: int) -> pd.Series:
     vol = series.rolling(window, min_periods=window).std()
     return vol * np.sqrt(365.0)
 
 
 def compute_atr(panel: pd.DataFrame, window: int) -> pd.Series:
-    df = panel.sort_values(["symbol", "ts"]).copy()
+    df = _ensure_symbol_ts_columns(panel).sort_values(["symbol", "ts"]).copy()
     prev_close = df.groupby("symbol")["close"].shift(1)
     tr = pd.concat(
         [
@@ -67,7 +80,7 @@ def compute_atr(panel: pd.DataFrame, window: int) -> pd.Series:
 
 
 def compute_trend_scores(panel: pd.DataFrame, cfg: TranstrendConfigV1) -> pd.DataFrame:
-    df = panel.copy()
+    df = _ensure_symbol_ts_columns(panel).copy()
     df = df.sort_values(["symbol", "ts"])
 
     def _per_symbol(group: pd.DataFrame) -> pd.DataFrame:
@@ -94,7 +107,7 @@ def compute_trend_scores(panel: pd.DataFrame, cfg: TranstrendConfigV1) -> pd.Dat
 
 
 def compute_danger_flags(panel: pd.DataFrame, cfg: TranstrendConfigV1) -> pd.Series:
-    df = panel.copy()
+    df = _ensure_symbol_ts_columns(panel).copy()
     df = df.sort_values(["symbol", "ts"])
     btc = df[df["symbol"] == "BTC-USD"]
     ts_index = pd.Index(sorted(df["ts"].unique()), name="ts")
@@ -210,7 +223,7 @@ def apply_atr_stops(panel: pd.DataFrame, cfg: TranstrendConfigV1) -> tuple[pd.Da
 
 
 def build_target_weights(panel: pd.DataFrame, cfg: TranstrendConfigV1) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.DataFrame]:
-    df = panel.copy()
+    df = _ensure_symbol_ts_columns(panel).copy()
     if "score" not in df.columns or "vol_ann" not in df.columns or "atr" not in df.columns:
         df = compute_trend_scores(df, cfg)
 
@@ -272,7 +285,8 @@ def simulate_portfolio(
     if cfg.execution_lag_bars < 1:
         raise ValueError("execution_lag_bars must be >= 1")
 
-    df = panel.copy().sort_values(["ts", "symbol"])
+    df = _ensure_symbol_ts_columns(panel).copy().sort_values(["ts", "symbol"])
+    weights_signal = _ensure_symbol_ts_columns(weights_signal).copy()
 
     ret = df.copy()
     ret["ret_oc"] = ret["close"] / ret["open"] - 1.0

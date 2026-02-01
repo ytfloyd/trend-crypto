@@ -19,6 +19,19 @@ class KumaConfig:
     atr_k: float = 2.0
 
 
+def _ensure_symbol_ts_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if "symbol" in df.columns and "ts" in df.columns:
+        return df
+    if isinstance(df.index, pd.MultiIndex) and len(df.index.levels) == 2:
+        df2 = df.reset_index()
+        cols = list(df2.columns)
+        cols[0] = "symbol"
+        cols[1] = "ts"
+        df2.columns = cols
+        return df2
+    raise ValueError("Expected columns ['symbol','ts'] or a 2-level MultiIndex.")
+
+
 def _compute_indicators(group: pd.DataFrame, cfg: KumaConfig) -> pd.DataFrame:
     close = group["close"]
     high = group["high"]
@@ -95,10 +108,7 @@ def _apply_trailing_stop(group: pd.DataFrame, cfg: KumaConfig) -> pd.DataFrame:
 def run_kuma_trend_backtest(
     panel: pd.DataFrame, cfg: KumaConfig
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    if not isinstance(panel.index, pd.MultiIndex):
-        raise ValueError("panel must be indexed by MultiIndex (symbol, ts)")
-
-    df = panel.reset_index().sort_values(["symbol", "ts"]).copy()
+    df = _ensure_symbol_ts_columns(panel).sort_values(["symbol", "ts"]).copy()
     df = df.groupby("symbol", group_keys=False).apply(lambda g: _compute_indicators(g, cfg))
 
     def _per_ts(group: pd.DataFrame) -> pd.DataFrame:
