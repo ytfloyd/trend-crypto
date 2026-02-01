@@ -1,15 +1,18 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
-import argparse
-import sys
 from pathlib import Path
+import sys
+sys.path.append(str(Path(__file__).resolve().parent))
+
+import argparse
 from typing import List
 
 import duckdb
 import pandas as pd
 
 from kuma_trend_lib_v0 import KumaConfig, run_kuma_trend_backtest
+from universes import KUMA_LIVE_UNIVERSE_CANDIDATES, get_universe
 from run_manifest_v0 import build_base_manifest, fingerprint_file, hash_config_blob, write_run_manifest
 
 
@@ -23,36 +26,19 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--symbols",
-        default=" ".join(
-            [
-                "BTC-USD",
-                "ETH-USD",
-                "LTC-USD",
-                "BCH-USD",
-                "OXT-USD",
-                "XLM-USD",
-                "XTZ-USD",
-                "ETC-USD",
-                "LINK-USD",
-                "ZRX-USD",
-                "KNC-USD",
-                "DASH-USD",
-                "MKR-USD",
-                "ATOM-USD",
-                "ALGO-USD",
-                "COMP-USD",
-                "BAND-USD",
-                "NMR-USD",
-                "CGLD-USD",
-                "UMA-USD",
-                "LRC-USD",
-                "YFI-USD",
-                "UNI-USD",
-                "SOL-USD",
-                "SUI-USD",
-            ]
-        ),
-        help="Space-separated list of symbols.",
+        default=None,
+        help="Space-separated list of symbols (highest priority).",
+    )
+    p.add_argument(
+        "--universe",
+        default=None,
+        help="Universe name (e.g., kuma_live_universe).",
+    )
+    p.add_argument(
+        "--universe_lookback_days",
+        type=int,
+        default=7,
+        help="Lookback window for universe pruning.",
     )
     p.add_argument("--start", required=True, help="Start date (inclusive, e.g., 2017-01-01)")
     p.add_argument("--end", required=True, help="End date (inclusive, e.g., 2025-01-01)")
@@ -60,7 +46,7 @@ def parse_args() -> argparse.Namespace:
         "--cash_yield_annual",
         type=float,
         default=0.04,
-        help="Annual cash yield (e.g., 0.04 for 4%).",
+        help="Annual cash yield (e.g., 0.04 for 4 pct).",
     )
     p.add_argument(
         "--out_dir",
@@ -94,8 +80,24 @@ def main() -> None:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    symbols = [s.strip() for s in args.symbols.split() if s.strip()]
-    if not symbols:
+    if args.symbols:
+        symbols = [s.strip() for s in args.symbols.split() if s.strip()]
+    elif args.universe:
+        symbols = get_universe(
+            args.universe,
+            db_path=str(db_path),
+            table=args.table,
+            lookback_days=args.universe_lookback_days,
+        )
+        candidates = KUMA_LIVE_UNIVERSE_CANDIDATES if args.universe == "kuma_live_universe" else symbols
+        dropped = sorted(set(candidates) - set(symbols))
+        dropped_preview = dropped[:10]
+        dropped_note = f"{dropped_preview}" + (" ..." if len(dropped) > 10 else "")
+        print(
+            f"[kuma_trend] universe={args.universe} candidates={len(candidates)} "
+            f"resolved={len(symbols)} dropped={dropped_note}"
+        )
+    else:
         symbols = [
             "BTC-USD",
             "ETH-USD",
