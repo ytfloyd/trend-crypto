@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from transtrend_crypto_lib_v0 import (
+from scripts.research.transtrend_crypto_lib_v0 import (
     HorizonSpec,
     TranstrendConfig,
     build_target_weights,
