@@ -80,8 +80,8 @@ def compute_atr(panel: pd.DataFrame, window: int) -> pd.Series:
 
 
 def compute_trend_scores(panel: pd.DataFrame, cfg: TranstrendConfigV1) -> pd.DataFrame:
-    df = _ensure_symbol_ts_columns(panel).copy()
-    df = df.sort_values(["symbol", "ts"])
+    df0 = _ensure_symbol_ts_columns(panel).copy()
+    df = df0.sort_values(["symbol", "ts"])
 
     def _per_symbol(group: pd.DataFrame) -> pd.DataFrame:
         close = group["close"]
@@ -102,6 +102,10 @@ def compute_trend_scores(panel: pd.DataFrame, cfg: TranstrendConfigV1) -> pd.Dat
         return group
 
     out = df.groupby("symbol", group_keys=False).apply(_per_symbol)
+    if "symbol" not in out.columns:
+        out["symbol"] = df0["symbol"].values
+    if "ts" not in out.columns:
+        out["ts"] = df0["ts"].values
     out["atr"] = compute_atr(out, cfg.atr_window)
     return out
 
