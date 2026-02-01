@@ -57,6 +57,7 @@ def _compute_indicators(group: pd.DataFrame, cfg: KumaConfig) -> pd.DataFrame:
     vol = ret_cc.rolling(cfg.vol_window, min_periods=cfg.vol_window).std().shift(1)
 
     out = group.copy()
+    out["symbol"] = group["symbol"].iloc[0] if "symbol" in group.columns else group.name
     out["fast_ma"] = fast_ma
     out["slow_ma"] = slow_ma
     out["breakout"] = breakout
@@ -68,6 +69,7 @@ def _compute_indicators(group: pd.DataFrame, cfg: KumaConfig) -> pd.DataFrame:
 
 def _apply_trailing_stop(group: pd.DataFrame, cfg: KumaConfig) -> pd.DataFrame:
     out = group.copy()
+    out["symbol"] = group["symbol"].iloc[0] if "symbol" in group.columns else group.name
     weights = []
     in_pos = False
     atr_entry = np.nan

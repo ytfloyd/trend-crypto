@@ -89,6 +89,7 @@ def compute_signals(panel: pd.DataFrame, fast: int, slow: int) -> pd.DataFrame:
         slow_ma = close.shift(1).rolling(slow, min_periods=slow).mean()
         signal = (fast_ma > slow_ma).map({True: 1.0, False: -1.0})
         out = group.copy()
+        out["symbol"] = group["symbol"].iloc[0] if "symbol" in group.columns else group.name
         out["signal"] = signal
         return out
 
@@ -110,7 +111,8 @@ def build_equal_weights(panel_with_signal: pd.DataFrame) -> pd.DataFrame:
             w = w / w.abs().sum()
         else:
             w = signal * 0.0
-        out = group[["ts", "symbol"]].copy()
+        out = group.copy()
+        out["ts"] = group["ts"].iloc[0] if "ts" in group.columns else group.name
         out["w_signal"] = w.values
         return out
 

@@ -76,6 +76,7 @@ def compute_trend_scores(panel: pd.DataFrame, cfg: TranstrendConfig) -> pd.DataF
         ret_cc = close.pct_change()
         vol_ann = _annualize_vol(ret_cc.shift(1), cfg.vol_window)
         group = group.copy()
+        group["symbol"] = group["symbol"].iloc[0] if "symbol" in group.columns else group.name
         group["score"] = score
         group["vol_ann"] = vol_ann
         return group
@@ -153,7 +154,8 @@ def build_target_weights(panel: pd.DataFrame, cfg: TranstrendConfig) -> tuple[pd
         if danger.get(group.name, False) and gross > 0:
             w = w * (cfg.danger_gross / gross)
 
-        out = group[["ts", "symbol"]].copy()
+        out = group.copy()
+        out["ts"] = group["ts"].iloc[0] if "ts" in group.columns else group.name
         out["w_signal"] = w.values
         return out
 
