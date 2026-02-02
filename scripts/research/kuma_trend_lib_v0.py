@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from groupby_utils import apply_by_symbol, apply_by_ts
 
 @dataclass(frozen=True)
 class KumaConfig:
@@ -57,7 +58,6 @@ def _compute_indicators(group: pd.DataFrame, cfg: KumaConfig) -> pd.DataFrame:
     vol = ret_cc.rolling(cfg.vol_window, min_periods=cfg.vol_window).std().shift(1)
 
     out = group.copy()
-    out["symbol"] = group["symbol"].iloc[0] if "symbol" in group.columns else group.name
     out["fast_ma"] = fast_ma
     out["slow_ma"] = slow_ma
     out["breakout"] = breakout
@@ -69,7 +69,6 @@ def _compute_indicators(group: pd.DataFrame, cfg: KumaConfig) -> pd.DataFrame:
 
 def _apply_trailing_stop(group: pd.DataFrame, cfg: KumaConfig) -> pd.DataFrame:
     out = group.copy()
-    out["symbol"] = group["symbol"].iloc[0] if "symbol" in group.columns else group.name
     weights = []
     in_pos = False
     atr_entry = np.nan
@@ -111,7 +110,7 @@ def run_kuma_trend_backtest(
     panel: pd.DataFrame, cfg: KumaConfig
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     df = _ensure_symbol_ts_columns(panel).sort_values(["symbol", "ts"]).copy()
-    df = df.groupby("symbol", group_keys=False).apply(lambda g: _compute_indicators(g, cfg))
+    df = apply_by_symbol(df, lambda g: _compute_indicators(g, cfg))
 
     def _per_ts(group: pd.DataFrame) -> pd.DataFrame:
         eligible = group["signal"].fillna(False) & group["vol"].notna()
@@ -128,8 +127,8 @@ def run_kuma_trend_backtest(
         out["weight"] = w.values
         return out
 
-    df = df.groupby("ts", group_keys=False).apply(_per_ts)
-    df = df.groupby("symbol", group_keys=False).apply(lambda g: _apply_trailing_stop(g, cfg))
+    df = apply_by_ts(df, _per_ts)
+    df = apply_by_symbol(df, lambda g: _apply_trailing_stop(g, cfg))
 
     weights_df = df.set_index(["symbol", "ts"])[["weight"]].sort_index()
     positions = df.set_index(["symbol", "ts"])[["close", "signal", "weight"]].sort_index()

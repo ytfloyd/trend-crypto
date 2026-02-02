@@ -11,6 +11,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 from run_manifest_v0 import build_base_manifest, fingerprint_file, write_run_manifest, hash_config_blob
+from groupby_utils import apply_by_ts
 
 from alphas101_lib_v0 import cs_rank
 
@@ -205,7 +206,7 @@ def build_weights_with_concentration(
         g["weight"] = g["w_raw"]
         return g
 
-    out = df.groupby("ts", group_keys=False).apply(_per_ts)
+    out = apply_by_ts(df, _per_ts)
     return out
 
 

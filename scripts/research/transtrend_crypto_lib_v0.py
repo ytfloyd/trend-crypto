@@ -7,6 +7,7 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 
+from groupby_utils import apply_by_symbol, apply_by_ts
 
 @dataclass(frozen=True)
 class HorizonSpec:
@@ -76,12 +77,11 @@ def compute_trend_scores(panel: pd.DataFrame, cfg: TranstrendConfig) -> pd.DataF
         ret_cc = close.pct_change()
         vol_ann = _annualize_vol(ret_cc.shift(1), cfg.vol_window)
         group = group.copy()
-        group["symbol"] = group["symbol"].iloc[0] if "symbol" in group.columns else group.name
         group["score"] = score
         group["vol_ann"] = vol_ann
         return group
 
-    out = df.groupby("symbol", group_keys=False).apply(_per_symbol)
+    out = apply_by_symbol(df, _per_symbol)
     if "symbol" not in out.columns:
         out["symbol"] = df0["symbol"].values
     if "ts" not in out.columns:
@@ -155,11 +155,10 @@ def build_target_weights(panel: pd.DataFrame, cfg: TranstrendConfig) -> tuple[pd
             w = w * (cfg.danger_gross / gross)
 
         out = group.copy()
-        out["ts"] = group["ts"].iloc[0] if "ts" in group.columns else group.name
         out["w_signal"] = w.values
         return out
 
-    weights = df.groupby("ts", group_keys=False).apply(_per_ts)
+    weights = apply_by_ts(df, _per_ts)
     weights["w_signal"] = weights["w_signal"].clip(lower=0.0)
     return weights.reset_index(drop=True), danger
 

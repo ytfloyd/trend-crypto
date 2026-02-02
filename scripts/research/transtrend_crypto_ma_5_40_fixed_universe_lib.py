@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import duckdb
 import pandas as pd
 
+from groupby_utils import apply_by_symbol, apply_by_ts
 UNIVERSE = [
     "BTC-USD",
     "ETH-USD",
@@ -89,11 +90,10 @@ def compute_signals(panel: pd.DataFrame, fast: int, slow: int) -> pd.DataFrame:
         slow_ma = close.shift(1).rolling(slow, min_periods=slow).mean()
         signal = (fast_ma > slow_ma).astype(float)
         out = group.copy()
-        out["symbol"] = group["symbol"].iloc[0] if "symbol" in group.columns else group.name
         out["signal"] = signal
         return out
 
-    out = df.groupby("symbol", group_keys=False).apply(_per_symbol)
+    out = apply_by_symbol(df, _per_symbol)
     return out
 
 
@@ -110,11 +110,10 @@ def build_equal_weights(panel_with_signal: pd.DataFrame) -> pd.DataFrame:
         else:
             w = signal * 0.0
         out = group.copy()
-        out["ts"] = group["ts"].iloc[0] if "ts" in group.columns else group.name
         out["w_signal"] = w.values
         return out
 
-    weights = df.groupby("ts", group_keys=False).apply(_per_ts)
+    weights = apply_by_ts(df, _per_ts)
     weights["w_signal"] = weights["w_signal"].clip(lower=0.0)
     return weights.reset_index(drop=True)
 
