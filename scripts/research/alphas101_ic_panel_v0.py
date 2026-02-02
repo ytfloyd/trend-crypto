@@ -8,6 +8,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 
+from groupby_utils import apply_by_ts
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
@@ -104,7 +105,11 @@ def main() -> None:
                 return np.nan
             return x.corr(y)
 
-        ic_series = sub.groupby("ts").apply(_cs_ic).dropna()
+        def _cs_ic_df(g: pd.DataFrame) -> pd.DataFrame:
+            return pd.DataFrame({"ic": [_cs_ic(g)]})
+
+        ic_df = apply_by_ts(sub, _cs_ic_df).dropna(subset=["ic"])
+        ic_series = ic_df.set_index("ts")["ic"].dropna()
         n_days = ic_series.shape[0]
         if n_days == 0:
             continue
