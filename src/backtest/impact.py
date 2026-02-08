@@ -10,12 +10,12 @@ import math
 def _rolling_volatility(bars: pl.DataFrame, window: int) -> list[float]:
     returns = bars.select(pl.col("close").pct_change().fill_null(0.0)).to_series()
     vol = returns.rolling_std(window_size=window, min_samples=window).fill_null(0.0)
-    return vol.to_list()
+    return list(vol.to_list())
 
 
 def _volume_usd(bars: pl.DataFrame) -> list[float]:
-    vol_usd = (bars["volume"] * bars["close"] + 1.0).to_list()
-    return vol_usd
+    vol_usd = (bars["volume"] * bars["close"] + 1.0)
+    return list(vol_usd.to_list())
 
 
 def compute_dynamic_slippage(

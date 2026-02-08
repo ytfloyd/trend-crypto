@@ -17,3 +17,4 @@ configs/research/btc_eth_daily_ma_5_40_v0.yaml
 
 # Python build artifacts
 *.egg-info/
+.ipynb_checkpoints/

@@ -5,7 +5,7 @@ from typing import Optional
 
 import polars as pl
 
-from strategy.base import TargetWeightStrategy
+from strategy.base import StrategySignals, TargetWeightStrategy
 from strategy.context import StrategyContext
 
 
@@ -41,6 +41,16 @@ class MACrossoverLongOnlyStrategy(TargetWeightStrategy):
         self.adx_entry_only = adx_entry_only
         self._in_pos: bool = False
 
+    def get_last_signals(self) -> StrategySignals:
+        return StrategySignals(
+            target_weight=0.0,
+            vol_scalar=self.last_vol_scalar,
+            adx=self.last_adx,
+            ma_signal=self.last_ma_signal,
+            adx_pass=self.last_adx_pass,
+            in_pos=self._in_pos,
+        )
+
     def _vol_scalar(self, closes: pl.Series) -> float:
         if self.target_vol_annual is None or self.target_vol_annual <= 0:
             return 1.0
@@ -51,13 +61,14 @@ class MACrossoverLongOnlyStrategy(TargetWeightStrategy):
         rets = window.pct_change().drop_nulls()
         if rets.is_empty():
             return 0.0
-        sigma = rets.std()
-        if sigma is None or sigma <= 0:
+        sigma_raw = rets.std()
+        sigma: float = float(sigma_raw) if sigma_raw is not None else 0.0  # type: ignore[arg-type]
+        if sigma <= 0:
             return 0.0
-        sigma_ann = sigma * math.sqrt(365)
+        sigma_ann: float = sigma * math.sqrt(365)
         if sigma_ann <= 0:
             return 0.0
-        return max(0.0, min(self.target_vol_annual / sigma_ann, 1.0, self.max_weight))
+        return max(0.0, min(float(self.target_vol_annual) / sigma_ann, 1.0, self.max_weight))
 
     def _adx(self, high: pl.Series, low: pl.Series, close: pl.Series) -> float:
         w = self.adx_window
@@ -82,7 +93,7 @@ class MACrossoverLongOnlyStrategy(TargetWeightStrategy):
         if len(tr_list) < w:
             return 0.0
 
-        def rma(values, window):
+        def rma(values: list[float], window: int) -> float:
             prev = sum(values[:window])
             rma_vals = [prev]
             for v in values[window:]:
@@ -110,11 +121,13 @@ class MACrossoverLongOnlyStrategy(TargetWeightStrategy):
         n = closes.len()
         if n < self.slow:
             return 0.0
-        fast_ma = closes.slice(n - self.fast, self.fast).mean()
-        slow_ma = closes.slice(n - self.slow, self.slow).mean()
-        if fast_ma is None or slow_ma is None:
+        fast_ma_raw = closes.slice(n - self.fast, self.fast).mean()
+        slow_ma_raw = closes.slice(n - self.slow, self.slow).mean()
+        if fast_ma_raw is None or slow_ma_raw is None:
             return 0.0
-        base_signal = fast_ma > slow_ma
+        fast_ma = float(fast_ma_raw)  # type: ignore[arg-type]
+        slow_ma = float(slow_ma_raw)  # type: ignore[arg-type]
+        base_signal: bool = fast_ma > slow_ma
         vol_scalar = self._vol_scalar(closes)
         self.last_vol_scalar = vol_scalar
         self.last_ma_signal = base_signal

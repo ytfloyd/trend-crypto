@@ -11,7 +11,10 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .hash import hash_config
+from .logging import get_logger
 from .timeframe import hours_per_bar
+
+logger = get_logger("config")
 
 
 class DataConfig(BaseModel):
@@ -176,6 +179,34 @@ class ExecutionConfig(BaseModel):
         return self
 
 
+class PortfolioConfig(BaseModel):
+    """Configuration for multi-asset portfolio backtesting.
+
+    When present in a RunConfigRaw, the runner routes to PortfolioEngine
+    instead of the single-asset BacktestEngine.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    symbols: list[str]
+    rebalance_frequency: str = "every_bar"
+    max_gross_leverage: float = 1.0
+    max_net_leverage: float = 1.0
+    max_single_name_weight: float = 1.0
+    equal_weight_default: bool = False
+
+    @model_validator(mode="after")
+    def check_symbols(self) -> "PortfolioConfig":
+        if not self.symbols:
+            raise ValueError("portfolio.symbols must contain at least one symbol")
+        if len(self.symbols) != len(set(self.symbols)):
+            raise ValueError("portfolio.symbols must be unique")
+        if self.max_gross_leverage <= 0:
+            raise ValueError("max_gross_leverage must be positive")
+        if self.max_single_name_weight <= 0:
+            raise ValueError("max_single_name_weight must be positive")
+        return self
+
+
 class RunConfigRaw(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     run_name: str = Field(default_factory=lambda: "btc_hourly")
@@ -184,9 +215,11 @@ class RunConfigRaw(BaseModel):
     strategy: StrategyConfigRaw
     risk: RiskConfigRaw
     execution: ExecutionConfig
+    portfolio: Optional[PortfolioConfig] = None
 
     def to_dict(self) -> dict[str, Any]:
-        return json.loads(self.model_dump_json())
+        result: dict[str, Any] = json.loads(self.model_dump_json())
+        return result
 
 
 class RunConfigResolved(BaseModel):
@@ -202,10 +235,12 @@ class RunConfigResolved(BaseModel):
     raw: RunConfigRaw
 
     def to_dict(self) -> dict[str, Any]:
-        return json.loads(self.model_dump_json())
+        result: dict[str, Any] = json.loads(self.model_dump_json())
+        return result
 
     def to_resolved_dict(self) -> dict[str, Any]:
-        return json.loads(self.model_dump_json(exclude={"raw"}))
+        result: dict[str, Any] = json.loads(self.model_dump_json(exclude={"raw"}))
+        return result
 
     def compute_hash(self) -> str:
         return hash_config(self.to_resolved_dict())
@@ -263,7 +298,9 @@ def compile_config(raw: RunConfigRaw) -> RunConfigResolved:
 
     # Risk window conversion
     if raw.risk.window_units == "hours":
-        risk_vol_window = _hours_to_bars(raw.risk.vol_window, bar_hours, min_bars=2)
+        _risk_vol_window = _hours_to_bars(raw.risk.vol_window, bar_hours, min_bars=2)
+        assert _risk_vol_window is not None  # always non-None since input is non-None
+        risk_vol_window: int = _risk_vol_window
     else:
         risk_vol_window = raw.risk.vol_window
 
@@ -281,8 +318,8 @@ def compile_config(raw: RunConfigRaw) -> RunConfigResolved:
             "risk.vol_window resolves to <5 bars; increase risk.vol_window (hours) for this timeframe."
         )
     if not raw.engine.strict_validation and risk_resolved.vol_window < 5:
-        print(
-            "Warning: risk.vol_window resolves to <5 bars; increase risk.vol_window (hours) for this timeframe."
+        logger.warning(
+            "risk.vol_window resolves to <5 bars; increase risk.vol_window (hours) for this timeframe."
         )
 
     return RunConfigResolved(

@@ -81,7 +81,7 @@ class BacktestEngine:
         self.aum_usd = aum_usd
         self.impact_coeff = impact_coeff
 
-    def run(self) -> tuple[Portfolio, dict]:
+    def run(self) -> tuple[Portfolio, dict[str, object]]:
         bars = self.data_portal.load_bars()
         validate_bars(bars)
 
@@ -89,31 +89,36 @@ class BacktestEngine:
         if n < 2:
             raise ValueError("Need at least two bars to simulate execution at next open.")
 
-        # compute weights at close
+        # Compute raw signals (strategy target weights + diagnostics) for all bars.
+        # The vectorized path avoids O(n^2) from per-bar DataFrame slicing.
+        # Risk manager is still applied per-bar because it depends on the
+        # cumulative history slice (vol targeting uses rolling window of history).
+        raw_signals_df = self.strategy.compute_signals_vectorized(
+            bars, self.cfg.engine.lookback
+        )
+        raw_weights = raw_signals_df["target_weight"].to_list()
+
+        # Apply risk manager per-bar (vol targeting needs the history slice)
         w_signal: list[float] = []
-        vol_signal: list[float] = []
-        adx_signal: list[float] = []
-        ma_signal: list[bool] = []
-        adx_pass_signal: list[bool] = []
-        in_pos_signal: list[bool] = []
         for i in range(n):
             ctx = make_strategy_context(bars, i, self.cfg.engine.lookback)
             if self.cfg.engine.strict_validation:
                 validate_context_bounds(ctx.history, ctx.decision_ts)
-            base_weight = self.strategy.on_bar_close(ctx)
-            final_weight = self.risk_manager.apply(base_weight, ctx.history)
+            final_weight = self.risk_manager.apply(raw_weights[i], ctx.history)
             w_signal.append(final_weight)
-            vol_signal.append(getattr(self.strategy, "last_vol_scalar", None))
-            adx_signal.append(getattr(self.strategy, "last_adx", None))
-            ma_signal.append(getattr(self.strategy, "last_ma_signal", False))
-            adx_pass_signal.append(getattr(self.strategy, "last_adx_pass", False))
-            in_pos_signal.append(getattr(self.strategy, "_in_pos", False))
+
+        # Extract diagnostic signals from the vectorized output
+        vol_signal = raw_signals_df["vol_scalar"].to_list()
+        adx_signal = raw_signals_df["adx"].to_list()
+        ma_signal = raw_signals_df["ma_signal"].to_list()
+        adx_pass_signal = raw_signals_df["adx_pass"].to_list()
+        in_pos_signal = raw_signals_df["in_pos"].to_list()
 
         lag = max(1, self.cfg.execution.execution_lag_bars)
         fee_slip_bps = (self.cfg.execution.fee_bps or 0.0) + (self.cfg.execution.slippage_bps or 0.0)
-        use_dynamic_slippage = bool(getattr(self, "use_dynamic_slippage", False))
-        aum_usd = float(getattr(self, "aum_usd", 0.0) or 0.0)
-        impact_coeff = float(getattr(self, "impact_coeff", 0.1) or 0.1)
+        use_dynamic_slippage = self.use_dynamic_slippage
+        aum_usd = float(self.aum_usd or 0.0)
+        impact_coeff = float(self.impact_coeff or 0.1)
 
         # Compute asset returns (open-to-close default, Model B)
         asset_ret_list, used_close_to_close_fallback = compute_asset_returns(bars, mode="open_to_close")
@@ -152,8 +157,8 @@ class BacktestEngine:
         funding_cost_list.append(0.0)  # No funding cost at t=0
         # cash yield per bar
         diffs = bars.select(pl.col("ts").diff().dt.total_seconds()).to_series().drop_nulls()
-        dt_seconds = diffs.median() if diffs.len() > 0 else 0
-        periods_per_year = (365 * 24 * 3600 / dt_seconds) if dt_seconds and dt_seconds > 0 else 8760
+        dt_seconds: float = float(diffs.median()) if diffs.len() > 0 else 0.0
+        periods_per_year: float = (365 * 24 * 3600 / dt_seconds) if dt_seconds > 0 else 8760.0
         rf_bar = (1 + self.cfg.execution.cash_yield_annual) ** (1 / periods_per_year) - 1 if periods_per_year > 0 else 0.0
         rf_bar_list.append(rf_bar)
         cash_weight_list.append(1.0)
@@ -323,29 +328,30 @@ class BacktestEngine:
         return portfolio, summary
 
 
-def _summary_stats(equity: pl.DataFrame) -> dict:
+def _summary_stats(equity: pl.DataFrame) -> dict[str, object]:
     if equity.is_empty():
         return {"total_return": 0.0, "sharpe": 0.0, "max_drawdown": 0.0}
     equity = equity.sort("ts")
     nav = equity["nav"]
     returns = nav.pct_change().fill_null(0.0)
-    start_nav = nav.item(0)
-    end_nav = nav.item(nav.len() - 1)
+    start_nav = float(nav.item(0))
+    end_nav = float(nav.item(nav.len() - 1))
     total_return = (end_nav / start_nav) - 1 if start_nav else 0.0
     total_return_pct = total_return * 100.0
     total_return_multiple = 1.0 + total_return
     diffs = equity.select(pl.col("ts").diff().dt.total_seconds()).to_series().drop_nulls()
-    dt_seconds = diffs.median() if diffs.len() > 0 else 0
-    periods_per_year = (365 * 24 * 3600 / dt_seconds) if dt_seconds and dt_seconds > 0 else 8760
+    dt_seconds: float = float(diffs.median()) if diffs.len() > 0 else 0.0  # type: ignore[arg-type]
+    periods_per_year: float = (365 * 24 * 3600 / dt_seconds) if dt_seconds > 0 else 8760.0
+    sharpe: float
     if returns.len() > 1:
-        mean = returns.mean()
-        std = returns.std(ddof=1)
-        sharpe = (mean / std) * (periods_per_year**0.5) if std and std > 0 else 0.0
+        mean = float(returns.mean() or 0.0)  # type: ignore[arg-type]
+        std = float(returns.std(ddof=1) or 0.0)  # type: ignore[arg-type]
+        sharpe = (mean / std) * (periods_per_year**0.5) if std > 0 else 0.0
     else:
         sharpe = 0.0
     running_max = nav.cum_max()
     drawdowns = (nav / running_max) - 1
-    max_drawdown = drawdowns.min()
+    max_drawdown = float(drawdowns.min() or 0.0)  # type: ignore[arg-type]
     return {
         "total_return": total_return,
         "total_return_decimal": total_return,

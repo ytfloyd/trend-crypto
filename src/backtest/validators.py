@@ -26,11 +26,11 @@ def validate_bars(bars: pl.DataFrame) -> None:
         raise ValueError("Negative volume found")
 
 
-def validate_context_bounds(history: pl.DataFrame, decision_ts) -> None:
+def validate_context_bounds(history: pl.DataFrame, decision_ts: object) -> None:
     max_ts = history.select(pl.col("ts").max()).item()
     if max_ts != decision_ts:
         raise AssertionError("Context includes future data")
-    if history.filter(pl.col("ts") > decision_ts).height > 0:
+    if history.filter(pl.col("ts") > pl.lit(decision_ts)).height > 0:
         raise AssertionError("Context leaked future ts")
 
 

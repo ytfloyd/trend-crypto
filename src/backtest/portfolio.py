@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List
+from typing import Any, List
 
 import polars as pl
 
@@ -17,9 +17,9 @@ class Portfolio:
 
     cash: float
     position_units: float = 0.0
-    equity_history: List[dict] = field(default_factory=list)
-    position_history: List[dict] = field(default_factory=list)
-    trade_history: List[dict] = field(default_factory=list)
+    equity_history: List[dict[str, Any]] = field(default_factory=list)
+    position_history: List[dict[str, Any]] = field(default_factory=list)
+    trade_history: List[dict[str, Any]] = field(default_factory=list)
 
     def nav(self, price: float) -> float:
         return self.cash + self.position_units * price
