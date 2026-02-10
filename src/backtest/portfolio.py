@@ -60,7 +60,7 @@ class Portfolio:
     def to_frames(self) -> dict[str, pl.DataFrame]:
         return {
             "equity": pl.DataFrame(self.equity_history) if self.equity_history else pl.DataFrame(),
-            "positions": pl.DataFrame(self.position_history)
+            "positions": pl.DataFrame(self.position_history, infer_schema_length=None)
             if self.position_history
             else pl.DataFrame(),
             "trades": pl.DataFrame(self.trade_history) if self.trade_history else pl.DataFrame(),
