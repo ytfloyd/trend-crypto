@@ -1,9 +1,11 @@
 #!/usr/bin/env python
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 import argparse
 import copy
 import subprocess
-import sys
-from pathlib import Path
 from typing import List
 
 import yaml
@@ -13,10 +15,19 @@ DEFAULT_BASE_CONFIG = "configs/runs/btc_daily_ma_5_40_v25_tv60_cash_yield.yaml"
 DEFAULT_RUN_ROOT = Path("artifacts/runs")
 
 
-def run_backtest_with_config(config_path: Path) -> None:
+def run_backtest_with_config(config_path: Path) -> str | None:
+    """Run the engine and return the run_id parsed from stdout (or None)."""
     cmd = [sys.executable, "scripts/run_backtest.py", "--config", str(config_path)]
     print(f"[run_btc_eth_daily_ma_5_40_v0] Running: {' '.join(cmd)}")
-    subprocess.check_call(cmd)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    sys.stdout.write(result.stdout)
+    sys.stderr.write(result.stderr)
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(result.returncode, cmd)
+    for line in result.stdout.splitlines():
+        if line.startswith("Run ID:"):
+            return line.split("Run ID:")[1].strip()
+    return None
 
 
 def main() -> None:
@@ -54,6 +65,7 @@ def main() -> None:
         default="btc_eth_daily_ma_5_40_v0_",
         help="Prefix for run_id / run_name.",
     )
+    parser.add_argument("--no_html", action="store_true", help="Skip HTML tearsheet generation.")
 
     args = parser.parse_args()
     base_config_path = Path(args.base_config)
@@ -93,7 +105,32 @@ def main() -> None:
         print(
             f"[run_btc_eth_daily_ma_5_40_v0] Symbol={symbol} run_id={run_id} cfg={tmp_cfg_path}"
         )
-        run_backtest_with_config(tmp_cfg_path)
+        engine_run_id = run_backtest_with_config(tmp_cfg_path)
+
+        # --- HTML tearsheet ---
+        if not args.no_html and engine_run_id:
+            try:
+                import pandas as _pd
+                eq_path = Path("artifacts/runs") / engine_run_id / "equity.parquet"
+                if eq_path.exists():
+                    from tearsheet_common_v0 import build_standard_html_tearsheet
+                    eq_df = _pd.read_parquet(eq_path)
+                    nav_col = "nav" if "nav" in eq_df.columns else "equity"
+                    strat_eq = (
+                        eq_df.set_index("ts")[nav_col]
+                        .rename("equity")
+                        .pipe(lambda s: s.set_axis(_pd.to_datetime(s.index)))
+                        .sort_index()
+                    )
+                    build_standard_html_tearsheet(
+                        out_html=eq_path.parent / "tearsheet.html",
+                        strategy_label=f"BTC/ETH Daily MA(5/40) – {symbol}",
+                        strategy_equity=strat_eq,
+                        equity_csv_path=str(eq_path),
+                        subtitle=f"Engine-based MA(5/40) baseline for {symbol}",
+                    )
+            except Exception as exc:
+                print(f"[run_btc_eth_daily_ma_5_40_v0] HTML tearsheet skipped: {exc}")
 
 
 if __name__ == "__main__":

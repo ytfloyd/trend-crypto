@@ -1,14 +1,18 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 import argparse
 import json
-from pathlib import Path
 
 import duckdb
 import pandas as pd
 
 from run_manifest_v0 import build_base_manifest, fingerprint_file, hash_config_blob, write_run_manifest
+from timeseries_bundle_v0 import write_timeseries_bundle
 from transtrend_crypto_lib_v0 import HorizonSpec, TranstrendConfig
 from transtrend_crypto_lib_v2_multispeed import combine_sleeves, run_sleeve
 
@@ -32,6 +36,15 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--danger_btc_vol_threshold", type=float, default=0.80)
     p.add_argument("--danger_btc_dd20_threshold", type=float, default=-0.20)
     p.add_argument("--danger_btc_ret5_threshold", type=float, default=-0.10)
+    p.add_argument("--write_bundle", action="store_true", default=True, help="Write timeseries bundle.")
+    p.add_argument("--no_write_bundle", action="store_false", dest="write_bundle", help="Disable bundle.")
+    p.add_argument(
+        "--bundle_format",
+        choices=["parquet", "csvgz", "both"],
+        default="csvgz",
+        help="Bundle output format.",
+    )
+    p.add_argument("--no_html", action="store_true", help="Skip HTML tearsheet generation.")
 
     return p.parse_args()
 
@@ -130,6 +143,43 @@ def main() -> None:
         combined_dir / "turnover.csv", index=False
     )
 
+    fast_bundle = None
+    slow_bundle = None
+    combined_bundle = None
+    if args.write_bundle:
+        bars_df = panel[["ts", "symbol", "open", "high", "low", "close", "volume"]].copy()
+        write_parquet = args.bundle_format in ("parquet", "both")
+        write_csvgz = args.bundle_format in ("csvgz", "both", "parquet")
+        fast_bundle = write_timeseries_bundle(
+            str(fast_dir),
+            bars_df=bars_df,
+            weights_signal_df=fast_out["weights_signal"],
+            weights_held_df=fast_out["weights_held"],
+            portfolio_df=fast_out["equity_df"],
+            write_parquet=write_parquet,
+            write_csvgz=write_csvgz,
+        )
+        slow_bundle = write_timeseries_bundle(
+            str(slow_dir),
+            bars_df=bars_df,
+            weights_signal_df=slow_out["weights_signal"],
+            weights_held_df=slow_out["weights_held"],
+            portfolio_df=slow_out["equity_df"],
+            write_parquet=write_parquet,
+            write_csvgz=write_csvgz,
+        )
+        combined_bundle = write_timeseries_bundle(
+            str(combined_dir),
+            bars_df=bars_df,
+            portfolio_df=combined_equity,
+            write_parquet=write_parquet,
+            write_csvgz=write_csvgz,
+        )
+        print(
+            f\"[transtrend_crypto_v2_multispeed] Wrote timeseries bundles: "
+            f\"fast_rows={fast_bundle.get('rows')} slow_rows={slow_bundle.get('rows')} combined_rows={combined_bundle.get('rows')}\"
+        )
+
     summary = {
         "fast_weight": args.fast_weight,
         "slow_weight": args.slow_weight,
@@ -155,6 +205,41 @@ def main() -> None:
         "table": args.table,
     }
     manifest = build_base_manifest("transtrend_crypto_v2_multispeed_spot", __import__("sys").argv)
+    artifacts_written = {
+        "fast": {
+            "equity": str((fast_dir / "equity.csv").resolve()),
+            "weights_signal": str((fast_dir / "weights_signal.parquet").resolve()),
+            "weights_held": str((fast_dir / "weights_held.parquet").resolve()),
+            "turnover": str((fast_dir / "turnover.csv").resolve()),
+        },
+        "slow": {
+            "equity": str((slow_dir / "equity.csv").resolve()),
+            "weights_signal": str((slow_dir / "weights_signal.parquet").resolve()),
+            "weights_held": str((slow_dir / "weights_held.parquet").resolve()),
+            "turnover": str((slow_dir / "turnover.csv").resolve()),
+        },
+        "combined": {
+            "equity": str((combined_dir / "equity.csv").resolve()),
+            "turnover": str((combined_dir / "turnover.csv").resolve()),
+            "summary": str((combined_dir / "combined_summary.json").resolve()),
+        },
+    }
+    if fast_bundle:
+        if fast_bundle.get("parquet"):
+            artifacts_written["fast"]["bundle_parquet"] = fast_bundle["parquet"]
+        if fast_bundle.get("csvgz"):
+            artifacts_written["fast"]["bundle_csvgz"] = fast_bundle["csvgz"]
+    if slow_bundle:
+        if slow_bundle.get("parquet"):
+            artifacts_written["slow"]["bundle_parquet"] = slow_bundle["parquet"]
+        if slow_bundle.get("csvgz"):
+            artifacts_written["slow"]["bundle_csvgz"] = slow_bundle["csvgz"]
+    if combined_bundle:
+        if combined_bundle.get("parquet"):
+            artifacts_written["combined"]["bundle_parquet"] = combined_bundle["parquet"]
+        if combined_bundle.get("csvgz"):
+            artifacts_written["combined"]["bundle_csvgz"] = combined_bundle["csvgz"]
+
     manifest.update(
         {
             "config": config_payload,
@@ -166,30 +251,25 @@ def main() -> None:
             },
             "time_range": {"start": args.start, "end": args.end},
             "universe": args.table,
-            "artifacts_written": {
-                "fast": {
-                    "equity": str((fast_dir / "equity.csv").resolve()),
-                    "weights_signal": str((fast_dir / "weights_signal.parquet").resolve()),
-                    "weights_held": str((fast_dir / "weights_held.parquet").resolve()),
-                    "turnover": str((fast_dir / "turnover.csv").resolve()),
-                },
-                "slow": {
-                    "equity": str((slow_dir / "equity.csv").resolve()),
-                    "weights_signal": str((slow_dir / "weights_signal.parquet").resolve()),
-                    "weights_held": str((slow_dir / "weights_held.parquet").resolve()),
-                    "turnover": str((slow_dir / "turnover.csv").resolve()),
-                },
-                "combined": {
-                    "equity": str((combined_dir / "equity.csv").resolve()),
-                    "turnover": str((combined_dir / "turnover.csv").resolve()),
-                    "summary": str((combined_dir / "combined_summary.json").resolve()),
-                },
-            },
+            "artifacts_written": artifacts_written,
         }
     )
     write_run_manifest(combined_dir / "run_manifest.json", manifest)
 
     print(f"[transtrend_crypto_v2_multispeed] Wrote {combined_dir}")
+
+    # --- HTML tearsheet ---
+    if not args.no_html:
+        from tearsheet_common_v0 import build_standard_html_tearsheet, load_equity_csv
+        strat_eq = load_equity_csv(str(combined_dir / "equity.csv"))
+        build_standard_html_tearsheet(
+            out_html=combined_dir / "tearsheet.html",
+            strategy_label="Transtrend Crypto v2 Multi-Speed",
+            strategy_equity=strat_eq,
+            equity_csv_path=str(combined_dir / "equity.csv"),
+            manifest_path=str(combined_dir / "run_manifest.json"),
+            subtitle="Multi-speed trend-following with fast and slow MA crossover channels",
+        )
 
 
 if __name__ == "__main__":

@@ -27,7 +27,6 @@ from common.config import (
 from data.portal import DataPortal
 from risk.risk_manager import RiskManager
 from strategy.base import TargetWeightStrategy
-from strategy.context import make_strategy_context
 
 
 class DummyPortal(DataPortal):
@@ -151,7 +150,7 @@ def test_open_to_close_timing_model_b():
     equity = frames["equity"].sort("ts")
     
     # Verify we used open-to-close returns
-    assert summary.get("used_close_to_close_fallback") == False, \
+    assert not summary.get("used_close_to_close_fallback"), \
         "Should use open-to-close when open column exists"
     
     # At t=0: strategy decides to go long at close

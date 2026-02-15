@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+import argparse
 
 import duckdb
 import pandas as pd
@@ -15,6 +18,7 @@ from transtrend_crypto_lib_v1 import (
     simulate_portfolio,
 )
 from transtrend_crypto_metrics_v1 import compute_metrics
+from timeseries_bundle_v0 import write_timeseries_bundle
 
 
 def parse_args() -> argparse.Namespace:
@@ -31,6 +35,15 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--atr_window", type=int, default=20)
     p.add_argument("--atr_k_grid", type=str, default="2.0,2.5,3.0,3.5,4.0")
     p.add_argument("--cooldown_grid", type=str, default="0,3,5,10")
+    p.add_argument("--write_bundle", action="store_true", default=True, help="Write timeseries bundle.")
+    p.add_argument("--no_write_bundle", action="store_false", dest="write_bundle", help="Disable bundle.")
+    p.add_argument(
+        "--bundle_format",
+        choices=["parquet", "csvgz", "both"],
+        default="csvgz",
+        help="Bundle output format.",
+    )
+    p.add_argument("--no_html", action="store_true", help="Skip HTML tearsheet generation.")
     return p.parse_args()
 
 
@@ -67,7 +80,7 @@ def load_panel(db_path: str, table: str, start: str, end: str) -> pd.DataFrame:
     return df
 
 
-def run_one(panel: pd.DataFrame, cfg: TranstrendConfigV1, out_dir: Path) -> dict:
+def run_one(panel: pd.DataFrame, cfg: TranstrendConfigV1, out_dir: Path, *, write_bundle: bool, bundle_format: str) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     panel_scored = compute_trend_scores(panel, cfg)
@@ -80,6 +93,25 @@ def run_one(panel: pd.DataFrame, cfg: TranstrendConfigV1, out_dir: Path) -> dict
     equity_df[["ts", "turnover_one_sided", "turnover_two_sided"]].to_csv(out_dir / "turnover.csv", index=False)
     stop_levels.to_parquet(out_dir / "stop_levels.parquet", index=False)
     stop_events.to_csv(out_dir / "stop_events.csv", index=False)
+
+    if write_bundle:
+        bars_df = panel_scored[["ts", "symbol", "open", "high", "low", "close", "volume"]].copy()
+        features_df = panel_scored[["ts", "symbol", "score", "vol_ann", "atr"]].copy()
+        write_parquet = bundle_format in ("parquet", "both")
+        write_csvgz = bundle_format in ("csvgz", "both", "parquet")
+        bundle_info = write_timeseries_bundle(
+            str(out_dir),
+            bars_df=bars_df,
+            features_df=features_df,
+            weights_signal_df=weights_signal,
+            weights_held_df=weights_held,
+            stops_df=stop_levels,
+            portfolio_df=equity_df,
+            write_parquet=write_parquet,
+            write_csvgz=write_csvgz,
+        )
+        bundle_path = bundle_info.get("parquet") or bundle_info.get("csvgz")
+        print(f"[transtrend_crypto_v1_stop_sweep] Wrote timeseries bundle: {bundle_path} (rows={bundle_info.get('rows')})")
 
     metrics = compute_metrics(equity_df)
 
@@ -154,9 +186,23 @@ def main() -> None:
                     atr_k=atr_k,
                     stop_cooldown_days=cooldown,
                 )
-                metrics = run_one(panel, cfg, run_dir)
+                metrics = run_one(panel, cfg, run_dir, write_bundle=args.write_bundle, bundle_format=args.bundle_format)
                 record.update(metrics)
                 record["success"] = True
+                # --- HTML tearsheet per sweep run ---
+                if not args.no_html:
+                    try:
+                        from tearsheet_common_v0 import build_standard_html_tearsheet, load_equity_csv
+                        strat_eq = load_equity_csv(str(run_dir / "equity.csv"))
+                        build_standard_html_tearsheet(
+                            out_html=run_dir / "tearsheet.html",
+                            strategy_label=f"Transtrend v1 Stop Sweep (k={atr_k}, cd={cooldown})",
+                            strategy_equity=strat_eq,
+                            equity_csv_path=str(run_dir / "equity.csv"),
+                            subtitle=f"ATR stop k={atr_k}, cooldown={cooldown} days",
+                        )
+                    except Exception as exc:
+                        print(f"[stop_sweep] HTML tearsheet failed for {run_dir}: {exc}")
             except Exception as exc:
                 record["error"] = str(exc)
             results.append(record)

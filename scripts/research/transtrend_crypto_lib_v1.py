@@ -7,7 +7,7 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 
-from groupby_utils import apply_by_symbol, apply_by_ts
+from scripts.research.groupby_utils import apply_by_symbol, apply_by_ts
 
 @dataclass(frozen=True)
 class HorizonSpec:

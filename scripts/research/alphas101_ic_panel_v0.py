@@ -8,7 +8,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from groupby_utils import apply_by_ts
+from scripts.research.groupby_utils import apply_by_ts
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(

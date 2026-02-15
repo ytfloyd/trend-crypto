@@ -11,11 +11,14 @@ Provides:
 - build_base_manifest(): consistent base keys
 """
 
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 import hashlib
 import json
 import subprocess
 import time
-from pathlib import Path
 from typing import Optional
 
 

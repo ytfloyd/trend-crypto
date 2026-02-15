@@ -8,9 +8,11 @@ Loads bars from DuckDB (Top50 ADV>10M view), runs the Growth Sleeve backtest,
 and writes standard artifacts (equity, weights, turnover, trades, debug).
 """
 
-import argparse
-import sys
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+import argparse
 from typing import Any, Dict
 
 import duckdb
@@ -68,6 +70,7 @@ def parse_args() -> argparse.Namespace:
         help="If set, low exposure triggers a hard failure.",
     )
 
+    p.add_argument("--no_html", action="store_true", help="Skip HTML tearsheet generation.")
     return p.parse_args()
 
 
@@ -341,6 +344,19 @@ def main() -> None:
     manifest_path = out_dir / f"{prefix}_run_manifest_{suffix}.json"
     write_run_manifest(manifest_path, manifest)
     print(f"[growth_runner] Wrote run manifest to {manifest_path}")
+
+    # --- HTML tearsheet ---
+    if not args.no_html:
+        from tearsheet_common_v0 import build_standard_html_tearsheet, load_equity_csv
+        strat_eq = load_equity_csv(str(equity_path))
+        build_standard_html_tearsheet(
+            out_html=out_dir / "tearsheet.html",
+            strategy_label="Alpha Ensemble v1.5 Growth Sleeve",
+            strategy_equity=strat_eq,
+            equity_csv_path=str(equity_path),
+            manifest_path=str(manifest_path),
+            subtitle="Daily growth sleeve using 101 alpha ensemble with top-K momentum overlay",
+        )
 
 
 if __name__ == "__main__":

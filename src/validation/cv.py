@@ -1,21 +1,23 @@
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
-import pandas as pd
+
 try:
-    from sklearn.model_selection._split import _BaseKFold  # type: ignore
+    from sklearn.model_selection._split import _BaseKFold
 except Exception:  # pragma: no cover - fallback when sklearn is unavailable
-    class _BaseKFold:
-        def __init__(self, n_splits=5, shuffle=False, random_state=None):
+    class _BaseKFold:  # type: ignore[no-redef]
+        def __init__(self, n_splits: int = 5, shuffle: bool = False, random_state: Any = None) -> None:
             self.n_splits = n_splits
             self.shuffle = shuffle
             self.random_state = random_state
 
-        def get_n_splits(self, X=None, y=None, groups=None):
+        def get_n_splits(self, X: Any = None, y: Any = None, groups: Any = None) -> int:
             return self.n_splits
 
 
-class PurgedKFold(_BaseKFold):
+class PurgedKFold(_BaseKFold):  # type: ignore[misc]
     """
     K-Fold Cross Validation with Purging and Embargo.
 

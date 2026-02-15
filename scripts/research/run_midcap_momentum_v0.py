@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 import argparse
 import json
 import subprocess
-from pathlib import Path
 from typing import List
 
 import yaml
@@ -81,6 +84,7 @@ def main() -> None:
         "--end",
         help="Override data.end in the config (ISO8601 UTC).",
     )
+    parser.add_argument("--no_html", action="store_true", help="Skip HTML tearsheet generation.")
     args = parser.parse_args()
 
     base_cfg = load_config(Path(args.config))
@@ -98,6 +102,31 @@ def main() -> None:
         cfg_path = write_temp_config(cfg, TMP_DIR)
         run_id = run_backtest(cfg_path)
         print(f"{symbol}: run_id={run_id}")
+
+        # --- HTML tearsheet ---
+        if not args.no_html and run_id:
+            try:
+                import pandas as _pd
+                eq_path = Path("artifacts/runs") / run_id / "equity.parquet"
+                if eq_path.exists():
+                    from tearsheet_common_v0 import build_standard_html_tearsheet
+                    eq_df = _pd.read_parquet(eq_path)
+                    nav_col = "nav" if "nav" in eq_df.columns else "equity"
+                    strat_eq = (
+                        eq_df.set_index("ts")[nav_col]
+                        .rename("equity")
+                        .pipe(lambda s: s.set_axis(_pd.to_datetime(s.index)))
+                        .sort_index()
+                    )
+                    build_standard_html_tearsheet(
+                        out_html=eq_path.parent / "tearsheet.html",
+                        strategy_label=f"Midcap Momentum – {symbol}",
+                        strategy_equity=strat_eq,
+                        equity_csv_path=str(eq_path),
+                        subtitle=f"Daily MA(5/40) long-only momentum for {symbol}",
+                    )
+            except Exception as exc:
+                print(f"[midcap_momentum] HTML tearsheet skipped for {symbol}: {exc}")
 
 
 if __name__ == "__main__":

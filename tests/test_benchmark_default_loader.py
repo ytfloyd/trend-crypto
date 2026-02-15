@@ -1,4 +1,3 @@
-import pandas as pd
 
 from scripts.research.tearsheet_common_v0 import build_benchmark_comparison_table
 

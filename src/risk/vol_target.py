@@ -15,7 +15,8 @@ def _sigma_hourly(history: pl.DataFrame, window: int) -> Optional[float]:
     log_rets = history.select(pl.col("close").log().diff().alias("lr")).drop_nulls()
     if log_rets.height < window:
         return None
-    return log_rets.tail(window).select(pl.col("lr").std(ddof=1)).item()
+    val: Optional[float] = log_rets.tail(window).select(pl.col("lr").std(ddof=1)).item()
+    return val
 
 
 @dataclass
