@@ -9,6 +9,7 @@ def apply_by_symbol(df: pd.DataFrame, fn):
         if _PD_MAJOR >= 3:
             group = group.copy()
             group["symbol"] = key
+            group.name = key  # preserve for downstream code
         out = fn(group)
         out = out.copy()
         out["symbol"] = key if _PD_MAJOR >= 3 else group["symbol"].iloc[0]
@@ -24,6 +25,7 @@ def apply_by_ts(df: pd.DataFrame, fn):
         if _PD_MAJOR >= 3:
             group = group.copy()
             group["ts"] = key
+            group.name = key  # preserve for downstream code
         out = fn(group)
         out = out.copy()
         out["ts"] = key if _PD_MAJOR >= 3 else group["ts"].iloc[0]
