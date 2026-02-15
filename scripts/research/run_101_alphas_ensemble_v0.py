@@ -1,17 +1,19 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 import argparse
 import os
-import sys
-from pathlib import Path
 from typing import List
 
 import duckdb
 import numpy as np
 import pandas as pd
 from run_manifest_v0 import build_base_manifest, fingerprint_file, write_run_manifest, hash_config_blob
-from groupby_utils import apply_by_ts
+from scripts.research.groupby_utils import apply_by_ts
 
 from alphas101_lib_v0 import cs_rank
 
@@ -369,6 +371,7 @@ def main() -> None:
         default="v1_base",
         help="Suffix used in ensemble output filenames.",
     )
+    parser.add_argument("--no_html", action="store_true", help="Skip HTML tearsheet generation.")
 
     args = parser.parse_args()
     db_path = resolve_db_path(args)
@@ -557,6 +560,19 @@ def main() -> None:
     manifest_path = out_dir / f"ensemble_run_manifest_{args.output_suffix}.json"
     write_run_manifest(manifest_path, manifest)
     print(f"[run_101_alphas_ensemble_v0] Wrote run manifest to {manifest_path}")
+
+    # --- HTML tearsheet ---
+    if not args.no_html:
+        from tearsheet_common_v0 import build_standard_html_tearsheet, load_equity_csv
+        strat_eq = load_equity_csv(str(equity_path))
+        build_standard_html_tearsheet(
+            out_html=out_dir / "tearsheet.html",
+            strategy_label="101 Alphas Ensemble",
+            strategy_equity=strat_eq,
+            equity_csv_path=str(equity_path),
+            manifest_path=str(manifest_path),
+            subtitle="Equal-weight ensemble across implemented 101 Alphas subset",
+        )
 
 
 if __name__ == "__main__":

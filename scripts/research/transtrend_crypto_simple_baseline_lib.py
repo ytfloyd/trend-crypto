@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import duckdb
 import pandas as pd
 
-from groupby_utils import apply_by_symbol, apply_by_ts
+from scripts.research.groupby_utils import apply_by_symbol, apply_by_ts
 UNIVERSE = [
     "BTC-USD",
     "ETH-USD",

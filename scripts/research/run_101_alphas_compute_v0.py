@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 import argparse
 import os
-from pathlib import Path
 from typing import Optional
 
 import duckdb
