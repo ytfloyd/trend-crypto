@@ -8,7 +8,7 @@ __pycache__/
 *.pyc
 
 # Data & artifacts
-data/
+/data/
 artifacts/
 configs/research/btc_eth_daily_ma_5_40_v0.yaml
 
