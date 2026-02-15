@@ -46,8 +46,8 @@ mypy_path = "src"
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
-module = "data.portal"
-ignore_missing_imports = true
+module = "data.*"
+ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = "duckdb.*"

@@ -157,7 +157,7 @@ class BacktestEngine:
         funding_cost_list.append(0.0)  # No funding cost at t=0
         # cash yield per bar
         diffs = bars.select(pl.col("ts").diff().dt.total_seconds()).to_series().drop_nulls()
-        dt_seconds: float = float(diffs.median()) if diffs.len() > 0 else 0.0
+        dt_seconds: float = float(diffs.median())  if diffs.len() > 0 else 0.0  # type: ignore[arg-type]
         periods_per_year: float = (365 * 24 * 3600 / dt_seconds) if dt_seconds > 0 else 8760.0
         rf_bar = (1 + self.cfg.execution.cash_yield_annual) ** (1 / periods_per_year) - 1 if periods_per_year > 0 else 0.0
         rf_bar_list.append(rf_bar)

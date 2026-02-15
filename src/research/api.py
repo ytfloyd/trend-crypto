@@ -31,7 +31,7 @@ from strategy.ma_crossover_long_only import MACrossoverLongOnlyStrategy
 logger = get_logger("research_api")
 
 
-class _InMemoryPortal(DataPortal):  # type: ignore[misc]
+class _InMemoryPortal(DataPortal):  # type: ignore[misc,unused-ignore]
     """DataPortal backed by an in-memory DataFrame."""
 
     def __init__(self, bars: pl.DataFrame) -> None:
