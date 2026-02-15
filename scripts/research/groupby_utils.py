@@ -5,12 +5,13 @@ _PD_MAJOR = int(pd.__version__.split(".")[0])
 
 def apply_by_symbol(df: pd.DataFrame, fn):
     def wrapped(group: pd.DataFrame):
+        key = group.name  # capture before any copy
         if _PD_MAJOR >= 3:
             group = group.copy()
-            group["symbol"] = group.name
+            group["symbol"] = key
         out = fn(group)
         out = out.copy()
-        out["symbol"] = group.name if _PD_MAJOR >= 3 else group["symbol"].iloc[0]
+        out["symbol"] = key if _PD_MAJOR >= 3 else group["symbol"].iloc[0]
         return out
 
     kw = {"include_groups": False} if _PD_MAJOR >= 3 else {}
@@ -19,12 +20,13 @@ def apply_by_symbol(df: pd.DataFrame, fn):
 
 def apply_by_ts(df: pd.DataFrame, fn):
     def wrapped(group: pd.DataFrame):
+        key = group.name  # capture before any copy
         if _PD_MAJOR >= 3:
             group = group.copy()
-            group["ts"] = group.name
+            group["ts"] = key
         out = fn(group)
         out = out.copy()
-        out["ts"] = group.name if _PD_MAJOR >= 3 else group["ts"].iloc[0]
+        out["ts"] = key if _PD_MAJOR >= 3 else group["ts"].iloc[0]
         return out
 
     kw = {"include_groups": False} if _PD_MAJOR >= 3 else {}
