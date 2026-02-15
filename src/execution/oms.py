@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Optional
 
 from common.logging import get_logger
 from .broker import BrokerInterface, BrokerOrder, OrderSide, OrderStatus

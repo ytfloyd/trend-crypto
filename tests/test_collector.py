@@ -5,13 +5,11 @@ real network calls. Run with: python -m pytest tests/test_collector.py -v
 """
 from __future__ import annotations
 
-import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import duckdb
 import polars as pl
 import pytest
 

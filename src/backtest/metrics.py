@@ -6,7 +6,6 @@ produced by either BacktestEngine or PortfolioEngine.
 from __future__ import annotations
 
 import math
-from typing import Optional
 
 import polars as pl
 
@@ -189,7 +188,7 @@ def risk_contribution(
             port_returns_list[t] += wi * rets[t]
 
     port_series = pl.Series("port", port_returns_list)
-    port_std = float(port_series.std(ddof=1) or 0.0)  # type: ignore[arg-type]
+    float(port_series.std(ddof=1) or 0.0)  # type: ignore[arg-type]
 
     result: dict[str, float] = {}
     for sym in symbols:

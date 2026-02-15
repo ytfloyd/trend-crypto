@@ -15,7 +15,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import polars as pl
-import pytest
 
 from monitoring.alerts import (
     Alert,

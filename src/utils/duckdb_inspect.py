@@ -7,7 +7,6 @@ from typing import Optional
 
 import duckdb
 
-from common.timeframe import timeframe_to_seconds
 
 def normalize_timeframe(timeframe: str) -> str:
     """

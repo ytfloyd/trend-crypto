@@ -9,7 +9,6 @@ decide at close[t], execute at open[t+1].
 """
 from __future__ import annotations
 
-import math
 from typing import Optional, Union
 
 import polars as pl

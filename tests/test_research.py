@@ -12,7 +12,6 @@ import math
 import shutil
 import tempfile
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 import polars as pl
 import pytest
@@ -25,10 +24,9 @@ from research.alpha_pipeline import (
     evaluate_alpha,
 )
 from research.api import quick_backtest, quick_sweep
-from research.experiment import ExperimentRun, ExperimentTracker
+from research.experiment import ExperimentTracker
 from research.optimizer import (
     ParameterOptimizer,
-    WalkForwardSplit,
     deflated_sharpe_ratio,
     walk_forward_splits,
 )

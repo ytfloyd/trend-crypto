@@ -33,7 +33,7 @@ def test_run_hrp_ensemble(tmp_path: Path):
         _write_spread_returns(alpha_dir / f"{name}.spread_returns.parquet", seed=100 + i)
 
     output_dir = tmp_path / "out"
-    result = run_hrp_ensemble(
+    run_hrp_ensemble(
         survivors_csv=str(survivors_csv),
         survivor_dir=str(tearsheet_dir),
         output_dir=str(output_dir),

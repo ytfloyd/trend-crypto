@@ -6,7 +6,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pytest
 
 # Ensure scripts/research is importable
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "research"))
@@ -15,7 +14,6 @@ from tearsheet_common_v0 import (
     _top_n_drawdown_periods,
     build_standard_html_tearsheet,
     compute_comprehensive_stats,
-    compute_drawdown,
 )
 
 

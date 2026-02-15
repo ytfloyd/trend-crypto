@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -74,7 +73,6 @@ def _multi_ols(
     # Simple sequential approach: regress on each factor independently
     betas: dict[str, float] = {}
     residuals = list(y)
-    total_r_sq = 0.0
 
     for name, factor_vals in factors.items():
         _, beta, r_sq = _simple_ols(residuals, factor_vals)

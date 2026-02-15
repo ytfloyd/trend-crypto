@@ -1,7 +1,5 @@
 """Test that MA baseline tear sheet uses the canonical builder."""
 import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 import pandas as pd
 
 

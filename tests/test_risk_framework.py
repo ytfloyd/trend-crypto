@@ -13,9 +13,8 @@ import math
 from datetime import datetime, timedelta, timezone
 
 import polars as pl
-import pytest
 
-from common.config import PortfolioConfig, RiskConfigRaw, compile_config
+from common.config import PortfolioConfig
 from risk.attribution import FactorAttribution, factor_risk_attribution
 from risk.regime import (
     RegimeState,
@@ -27,7 +26,6 @@ from risk.regime import (
 from risk.risk_manager import PortfolioRiskManager, RiskManager
 from risk.stress import (
     BUILTIN_SCENARIOS,
-    COVID_MARCH_2020,
     StressResult,
     StressScenario,
     run_all_stress_tests,

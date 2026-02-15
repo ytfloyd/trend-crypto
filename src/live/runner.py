@@ -5,7 +5,7 @@ submit orders → reconcile. Supports both single-cycle and continuous modes.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -136,7 +136,6 @@ class LiveRunner:
         Returns:
             List of CycleResult from each cycle.
         """
-        from data.feed import ReplayDataFeed
 
         results: list[CycleResult] = []
         count = 0

@@ -6,7 +6,7 @@ Provides grid search with walk-forward splits and Deflated Sharpe Ratio
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from itertools import product
 from typing import Any, Callable, Optional
 

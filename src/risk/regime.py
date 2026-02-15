@@ -9,7 +9,6 @@ import math
 from enum import Enum
 from typing import Optional
 
-import polars as pl
 
 from common.logging import get_logger
 

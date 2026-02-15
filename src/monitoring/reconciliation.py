@@ -5,9 +5,9 @@ and reports drift metrics.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from common.logging import get_logger
 

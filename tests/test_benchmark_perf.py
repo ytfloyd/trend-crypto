@@ -228,7 +228,7 @@ def test_get_last_signals_ma_crossover():
     strategy = MACrossoverLongOnlyStrategy(fast=5, slow=20, max_weight=1.0)
 
     ctx = make_strategy_context(bars, 49, None)
-    w = strategy.on_bar_close(ctx)
+    strategy.on_bar_close(ctx)
     signals = strategy.get_last_signals()
 
     assert isinstance(signals, StrategySignals)

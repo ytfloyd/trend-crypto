@@ -46,10 +46,7 @@ from risk.risk_manager import RiskManager
 from strategy.base import (
     PortfolioStrategy,
     SingleAssetAdapter,
-    StrategySignals,
-    TargetWeightStrategy,
 )
-from strategy.context import StrategyContext
 from strategy.ma_crossover_long_only import MACrossoverLongOnlyStrategy
 
 

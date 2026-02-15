@@ -3,7 +3,7 @@ import pytest
 
 pytest.importorskip("duckdb")
 
-from datetime import datetime, timezone
+from datetime import datetime
 import tempfile
 from pathlib import Path
 
@@ -24,7 +24,6 @@ from utils.duckdb_inspect import (
 @pytest.fixture
 def temp_db_with_bars_1d():
     """Create a temporary DuckDB with bars_1d table and sample data."""
-    import tempfile
     import os
     
     # Create temp file path but delete the file so DuckDB can create a fresh database
@@ -65,7 +64,6 @@ def temp_db_with_bars_1d():
 @pytest.fixture
 def temp_db_with_multiple_tables():
     """Create a temporary DuckDB with multiple bars_* tables."""
-    import tempfile
     import os
     
     # Create temp file path but delete the file so DuckDB can create a fresh database
