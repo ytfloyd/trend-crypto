@@ -24,6 +24,9 @@ dev = [
   "reportlab>=4.0.0",
   "mypy>=1.10.0",
 ]
+collect = [
+  "coinbase-advanced-py>=1.0.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -65,6 +68,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "pandas.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "coinbase.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
