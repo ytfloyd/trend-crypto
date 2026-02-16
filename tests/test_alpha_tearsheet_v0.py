@@ -1,12 +1,8 @@
 from pathlib import Path
 
 import polars as pl
-import pytest
 
-try:
-    from analysis.tearsheet import generate_tearsheet
-except ModuleNotFoundError:
-    pytest.skip("analysis.tearsheet not yet implemented", allow_module_level=True)
+from analysis.tearsheet import generate_tearsheet
 
 
 def test_generate_tearsheet_outputs(tmp_path: Path):
@@ -41,6 +37,8 @@ def test_generate_tearsheet_outputs(tmp_path: Path):
     assert spread_path.exists()
     spread_df = pl.read_parquet(spread_path)
     assert set(["ts", "spread_ret"]).issubset(set(spread_df.columns))
+
+
 def test_generate_tearsheet_small_universe(tmp_path: Path):
     ts = pl.date_range(start=pl.datetime(2024, 1, 1), end=pl.datetime(2024, 3, 1), interval="1d", eager=True)
     symbols = ["BTC", "ETH", "SOL"]
@@ -57,5 +55,6 @@ def test_generate_tearsheet_small_universe(tmp_path: Path):
     )
     output = tmp_path / "alpha_small"
     summary = generate_tearsheet(df, str(output), alpha_name="alpha_small", n_quantiles=5)
+
     assert summary["effective_quantiles"] == 3
     assert (output.with_suffix(".pdf")).exists()

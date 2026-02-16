@@ -8,10 +8,7 @@ import pytest
 
 pytest.importorskip("scipy")
 
-try:
-    from scripts.run_hrp_ensemble import run_hrp_ensemble
-except ModuleNotFoundError:
-    pytest.skip("scripts.run_hrp_ensemble not yet implemented", allow_module_level=True)
+from scripts.run_hrp_ensemble import run_hrp_ensemble
 
 
 def _write_spread_returns(path: Path, seed: int) -> None:
