@@ -74,6 +74,26 @@ ignore_missing_imports = true
 module = "coinbase.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "alphas.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "analysis.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "portfolio.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "reportlab.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "scipy.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]

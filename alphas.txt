@@ -1,0 +1,6 @@
+# Formulaic Alpha Engine v0 examples (no ts_rank)
+alpha_001 = rank(delta(log(close), 5))
+alpha_002 = rank(-1 * delta(close, 1) / close)
+alpha_003 = scale(ts_min(close, 10) / ts_max(close, 10))
+alpha_004 = rank(correlation(close, volume, 5))
+alpha_005 = scale(delta(close, 3))
