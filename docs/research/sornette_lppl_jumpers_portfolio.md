@@ -11,7 +11,9 @@ We apply Didier Sornette's Log-Periodic Power Law Singularity (LPPLS) model — 
 
 We implement a two-layer signal architecture that combines (i) a fast super-exponential growth detector based on log-price convexity, which fires early in the explosive phase, with (ii) the full LPPLS confirmation layer, which provides higher precision and a critical-time estimate for exit timing. A Bitcoin dual-SMA regime filter restricts capital deployment to bull and risk-on periods.
 
-Over the 2023--2026 sample (162 USD-quoted crypto tokens, $5M minimum ADV), the "Jumpers" portfolio achieves a CAGR of 20.6% and a Sharpe ratio of 0.47, compared to 4.3% CAGR / 0.26 Sharpe for the equal-weight basket — while investing only 49% of the time. Over the full 2021--2026 sample (which includes the 2022 bear market), the regime-filtered strategy produces 6.4% CAGR / 0.26 Sharpe versus -4.0% CAGR / -0.15 Sharpe without the regime filter, demonstrating that Sornette's framework is a regime-conditional alpha source.
+Over the full 2021--2026 sample (287 USD-quoted crypto tokens, $1M minimum ADV), the fast super-exponential layer achieves 40.5% CAGR / 1.15 Sharpe / -19.1% max drawdown. The blended strategy (55% fast / 45% LPPLS) achieves 34.1% CAGR / 0.75 Sharpe — LPPLS at daily resolution *hurts* performance (marginal Sharpe -0.40). The BTC-SMA-gated equal-weight benchmark dominates at 37.6% CAGR / 2.48 Sharpe / -16.2% max drawdown, demonstrating that the regime filter alone captures most of the available alpha.
+
+LPPLS's genuine contribution emerges at hourly resolution (Section 9). Over the full 2021--2026 sample (1,806 trades across 37 liquid tokens), the hourly system achieves 126.3% CAGR / 2.20 Sharpe / -36.8% MaxDD with 30 bps costs. tc-exits show 62% hit rate (p<0.0001 vs trailing stops) but portfolio-level marginal Sharpe is only +0.02 — the tc value is primarily in tail risk reduction (MaxDD improves 3.3pp). The system breaks at ~75 bps, constraining deployment to top-20 liquid tokens.
 
 ---
 
@@ -533,22 +535,174 @@ Several refinements could improve signal quality:
 
 ### 9.5 Real-Time Production System
 
-The vectorised LPPLS fitter (13ms per fit) is fast enough for intraday evaluation. A production system could:
+The hourly scanner (54 seconds for 3,000 timestamps × 38 symbols) is already production-ready. A streaming version could trigger alerts on new bubble signatures and auto-execute \( t_c \)-based exits.
 
-- Scan the full universe every hour during active markets.
-- Trigger alerts when new bubble signatures emerge.
-- Execute entries and exits with market-impact-aware order routing.
-- Monitor position-level \( t_c \) estimates in real time for dynamic exit management.
+---
+
+## 8. Robustness: Cost Sensitivity & Signal Ablation
+
+### 8.1 Transaction Cost Sensitivity (2021--2026)
+
+| TC (one-way) | CAGR   | Sharpe | Max DD  |
+|:-------------|:------:|:------:|:-------:|
+| 0 bps        | 38.4%  | 0.84   | -49.3%  |
+| 20 bps       | 34.1%  | 0.75   | -49.6%  |
+| 30 bps       | 32.0%  | 0.70   | -49.7%  |
+| 50 bps       | 27.9%  | 0.61   | -50.1%  |
+| 100 bps      | 18.2%  | 0.40   | -51.6%  |
+| 150 bps      | 9.2%   | 0.20   | -56.7%  |
+
+The strategy remains profitable at all cost levels but degrades materially above 50 bps.
+
+### 8.2 Signal Layer Ablation
+
+| Configuration        | CAGR   | Sharpe | Max DD  | LPPLS Marginal |
+|:---------------------|:------:|:------:|:-------:|:--------------:|
+| **Fast-only (no LPPLS)** | **40.5%** | **1.15** | **-19.1%** | —    |
+| LPPL-only (no fast)  | 21.0%  | 0.72   | -13.1%  | —              |
+| Blended (55/45)      | 34.1%  | 0.75   | -49.6%  | **-0.40**      |
+
+At daily resolution, the fast layer alone outperforms the blended variant on every metric. **Adding LPPLS at daily frequency hurts**: marginal Sharpe is -0.40. This is because LPPLS fits evaluated every 20 days are too sparse and noisy to add useful information to the faster convexity signal.
+
+LPPLS's value emerges at hourly resolution (Section 9) where \( t_c \) estimates are statistically significant at the per-trade level, though portfolio-level marginal Sharpe is modest (+0.02).
+
+#### The -49.6% Drawdown: Root Cause
+
+The blended strategy's -49.6% max drawdown occurred Nov 18, 2023 -- Jan 3, 2024, **during a bull regime** (BTC +17%). This is a portfolio construction flaw, not a signal failure:
+
+1. **Single-token concentration**: Signal strength + ivol weighting placed 99.99% of capital in 1INCH-USD for ~40 consecutive days. The signal for 1INCH dominated all other positions, and no position concentration cap was enforced.
+2. **Data gap**: 1INCH's low holiday trading volume dropped it below the ADV filter for Dec 25 -- Jan 2, compressing 9 days of price change into a single -22.4% return on Jan 3.
+3. **Vol-target leverage**: The zero-return days (from the data gap) drove realized portfolio vol to near-zero, pushing the vol-target overlay to its 2.0x cap. Combined: 2.0 × (-22.4%) = -44.9% single-day loss.
+
+The fast-only variant avoids this (-19.1% MaxDD) because its signals are more diversified across tokens. **Production fix**: enforce a max 25% per-position cap and freeze vol-targeting when data gaps are detected.
+
+### 8.3 Benchmark Comparison
+
+| Strategy                 | CAGR   | Vol    | Sharpe | Max DD  |
+|:-------------------------|:------:|:------:|:------:|:-------:|
+| **Fast-only**            | **40.5%** | **35.2%** | **1.15** | **-19.1%** |
+| Blended (55/45)          | 34.1%  | 45.7%  | 0.75   | -49.6%  |
+| **BTC-SMA-Gated EW**    | **37.6%** | **15.2%** | **2.48** | **-16.2%** |
+| Ungated EW Basket         | -1.6%  | 21.1%  | -0.08  | —       |
+| BTC Buy & Hold            | 3.3%   | 56.7%  | 0.06   | —       |
+
+The BTC-SMA-gated EW benchmark dominates on risk-adjusted terms (2.48 Sharpe, -16.2% MaxDD). The regime filter is the single most valuable component — the ungated EW basket loses money (-1.6% CAGR). The fast super-exponential layer provides useful concentration alpha (40.5% CAGR, 1.15 Sharpe — note: this is the fast-only variant, not the blended 0.75 Sharpe), but adding LPPLS at daily frequency degrades performance. For the hourly system, see Section 9 — which now includes full-sample results, cost sensitivity, stop sensitivity, tc-exit ablation, and honest constraints.
+
+---
+
+## 9. High-Frequency Extension: Hourly LPPLS Jumpers
+
+### 9.1 Motivation
+
+The daily system detects bubbles after they've developed for weeks. Many of the most explosive crypto moves — 50--100%+ in 48--72 hours — are too fast for daily rebalancing. The hourly extension aims to detect and ride these intra-week explosive moves using the same theoretical framework.
+
+### 9.2 Architecture
+
+**Two-stage hourly detection** running every 6 hours across 38 liquid symbols (top by median daily dollar volume > $5M):
+
+- **Stage 1 (fast scan, ~0.1ms/symbol)**: Super-exponential convexity on 12/24/48/72-hour windows. Only flags moves with sufficient amplitude (>5% scaled by window length). Fires at ~6% rate.
+- **Stage 2 (LPPLS confirmation, ~13ms/fit)**: Full LPPLS fit on 48/96/168-hour windows for triggered assets only. Estimates \( t_c \) (hours until critical time) and bubble confidence. Confirms ~30% of triggers.
+
+**Event-driven exit rules** (the core LPPLS edge):
+
+| Exit Rule      | Description                                 |
+|:---------------|:--------------------------------------------|
+| **tc-exit**    | LPPLS \( t_c \) estimate < 4 hours          |
+| Trailing stop  | Position drops 15% from peak                |
+| Max hold       | 168 hours (7 days)                          |
+| Regime exit    | BTC dual-SMA filter turns bearish           |
+
+### 9.3 Results
+
+**Two sample periods** to address cherry-picking concerns (hourly data is available from 2020-10 with 26+ symbols — the 2024 start in earlier versions was a choice, not a data constraint):
+
+| Sample | CAGR | Sharpe | Max DD | Calmar | Days | Trades |
+|:-------|:----:|:------:|:------:|:------:|:----:|:------:|
+| **Full (2021-2026)** | **126.3%** | **2.20** | -36.8% | 3.43 | 1,839 | 1,806 |
+| Bull window (2024-2026) | 127.6% | 2.05 | -33.2% | 3.84 | 745 | 795 |
+
+The full-sample run includes the 2022 crash (BTC -77%) and confirms the system's robustness: 126.3% CAGR / 2.20 Sharpe over one complete bull-bear-bull cycle.
+
+### 9.4 Trade Analysis by Exit Type (full sample, with 95% CIs)
+
+| Exit Type | Count | Hit Rate [95% CI] | Avg Return [95% CI] | Avg Hold |
+|:----------|:-----:|:------------------:|:--------------------:|:--------:|
+| **TC** | 615 | **62.0%** [58.1--65.7%] | **+4.8%** [4.0--5.7%] | 18h |
+| Stop | 404 | 31.9% [27.6--36.6%] | -0.5% [-1.9--1.1%] | 89h |
+| Max hold | 493 | 59.4% [55.0--63.7%] | +3.1% [2.0--4.2%] | 168h |
+| Regime | 294 | — | — | — |
+| *Total* | *1,806* | *44.5%* | *+2.9%* | *72h (3d)* |
+
+**Statistical significance**: Welch t=5.60 (p<0.0001), Mann-Whitney U p<0.0001 for tc-exit vs stop. Spread across 33 unique symbols; top-5 concentration only 29%.
+
+### 9.5 tc-Exit Ablation: Portfolio-Level Honesty
+
+The per-trade metrics favour tc-exits decisively. But removing tc-exits entirely yields Sharpe 2.04 vs 2.05 with (**marginal Sharpe: +0.02**). MaxDD improves from -36.5% to -33.2% (3.3pp). The tc-exit rule's value is primarily in **tail risk reduction**, not average return enhancement. A tighter trailing stop (5%) actually produces better returns (190% vs 128% CAGR, 2.99 vs 2.05 Sharpe).
+
+This is an honest finding that tempers the tc-exit narrative: the LPPLS critical time estimate is statistically real and per-trade superior, but its portfolio-level economic significance is modest.
+
+### 9.6 Cost Sensitivity
+
+| TC (one-way) | CAGR | Sharpe | Max DD |
+|:-------------|:----:|:------:|:------:|
+| 10 bps | 186.1% | 3.00 | -32.2% |
+| 20 bps | 155.2% | 2.50 | -32.7% |
+| **30 bps** | **127.6%** | **2.05** | **-33.2%** |
+| 50 bps | 81.0% | 1.30 | -35.0% |
+| 100 bps | 2.1% | 0.03 | -53.0% |
+| 150 bps | -42.5% | -0.68 | -76.3% |
+
+**Break-even: ~75 bps.** The system breaks at 100 bps. This constrains deployment to the top-20 most liquid tokens where 30-50 bps execution is realistic. For anything beyond top-20, actual costs of 100-150 bps make this strategy unworkable.
+
+### 9.7 Trailing Stop Sensitivity
+
+| Stop Level | CAGR | Sharpe | Max DD |
+|:-----------|:----:|:------:|:------:|
+| 5% | 190.3% | 2.99 | -36.5% |
+| 10% | 154.6% | 2.44 | -36.1% |
+| **15%** | **127.6%** | **2.05** | **-33.2%** |
+| 20% | 97.2% | 1.55 | -38.0% |
+| 25% | 118.4% | 1.87 | -33.4% |
+
+The 5% stop dominates but generates 767 stop-exits (high turnover). The 15% stop is a moderate choice, not optimal.
+
+### 9.8 AUM Capacity Estimate
+
+The hourly system trades the top-10 tokens by ADV. At the latest snapshot, these have a combined daily volume of ~$2.3B, but the constraint is the smallest position in the basket:
+
+| Participation Rate | Max AUM (est.) | Notes |
+|:-------------------|:--------------:|:------|
+| 0.5% | ~$4M | Conservative |
+| 1.0% | ~$8M | Baseline recommendation |
+| 2.0% | ~$15M | Aggressive |
+| 5.0% | ~$39M | Likely market-impact-impaired |
+
+At >$15M, market impact on non-BTC/ETH positions (ADV $18-32M) pushes effective costs toward the 75 bps break-even. **Recommendation: pilot at $5M or less notional, top-10 tokens only, 90-day evaluation window.**
+
+The gated EW benchmark's scalability is similarly constrained: 64% of its universe (48 of 75 current symbols) has ADV below $5M. The universe filter threshold is $1M ADV, not $5M. At 1% participation, gated EW caps at approximately $15-20M AUM.
+
+### 9.9 Honest Constraints
+
+1. **Cost cliff**: ~75 bps break-even constrains this to top-20 liquid tokens at realistic AUM.
+2. **Regime dependence**: 294 regime exits (16%) show the BTC dual-SMA filter, not LPPLS, is doing most of the heavy lifting.
+3. **Right-tail dependence**: 44.5% overall hit rate with 2.9% avg return implies a fat right tail — a few big winners carry the portfolio. Extended losing streaks are expected in live trading.
+4. **One cycle**: 2021-2026 includes one full bull-bear-bull cycle. One cycle is not sufficient for confident out-of-sample extrapolation.
+5. **LPPLS at daily resolution hurts performance** (marginal Sharpe -0.40). The regime filter is the dominant alpha source.
+6. **tc-exit marginal portfolio Sharpe is only +0.02** — per-trade statistics are strong but the economic significance at the portfolio level is modest.
 
 ---
 
 ## 10. Conclusion
 
-We demonstrate that Sornette's LPPLS framework, originally developed for crash prediction, can be inverted to detect explosive upside moves in digital assets and construct a profitable portfolio of "jumpers." The two-layer signal architecture — fast super-exponential detection plus LPPLS confirmation — provides both early entry and principled exit timing.
+We demonstrate that Sornette's LPPLS framework, originally developed for crash prediction, can be inverted to detect explosive upside moves in digital assets. The key findings:
 
-The critical finding is that LPPLS-based alpha is **regime-conditional**: the signals generate positive returns during crypto bull markets (20.6% CAGR, 0.47 Sharpe over 2023--2026) but destroy capital during bear markets (-4.0% CAGR without regime filter). A simple Bitcoin dual-SMA regime filter resolves this, converting the strategy into a market-state-aware allocation that deploys capital only when bubble dynamics are plausible.
+1. **The BTC-SMA regime filter is the dominant alpha source.** A simple gated equal-weight basket achieves 2.48 Sharpe / -16.2% MaxDD — superior to any signal-driven strategy on risk-adjusted terms. The regime filter should be the foundation of any crypto allocation.
 
-The strategy is most promising as a **complement to the momentum framework** developed in Chapters 1--8. Momentum captures persistent trends; LPPLS captures their explosive acceleration. Together, they span the full spectrum of directional alpha in digital asset markets.
+2. **The fast super-exponential layer provides useful concentration alpha** at daily resolution (40.5% CAGR, 1.15 Sharpe). Adding LPPLS at daily frequency degrades performance (marginal Sharpe -0.40) because the fits are too sparse/noisy at 20-day evaluation frequency. Note: the literature table cites 1.15 Sharpe — this is the daily **fast-only** layer, not the blended strategy (0.75 Sharpe).
+
+3. **LPPLS's genuine contribution is at hourly resolution — but less than initially claimed.** Over the full 2021-2026 sample, the hourly system achieves 126.3% CAGR / 2.20 Sharpe (1,806 trades). tc-exits show 62% hit rate with p<0.0001 statistical significance vs trailing stops. However, the **portfolio-level marginal Sharpe from tc-exits is only +0.02** — the tc value is primarily in tail risk reduction (MaxDD improves 3.3pp), not average returns. The system breaks at ~75 bps, constraining it to top-20 liquid tokens.
+
+4. **The strategy is most promising as a complement to the momentum framework** developed in Chapters 1--8. Momentum captures persistent trends; the fast super-exponential layer captures their acceleration; and the hourly system provides a higher-frequency alpha source, though its capacity is limited by execution costs.
 
 ---
 

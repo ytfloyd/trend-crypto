@@ -97,8 +97,13 @@ def main():
     out_dir.mkdir(exist_ok=True)
 
     if args.recompute:
-        for f in out_dir.glob("*.parquet"):
-            f.unlink()
+        daily_files = ["bubble_indicators.parquet", "superexp_indicators.parquet",
+                       "blended_signals.parquet", "jumpers_backtest.parquet",
+                       "jumpers_weights.parquet"]
+        for name in daily_files:
+            p = out_dir / name
+            if p.exists():
+                p.unlink()
 
     # 1. Load data
     print("=" * 70)
