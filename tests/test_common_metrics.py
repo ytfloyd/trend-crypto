@@ -8,13 +8,9 @@ from datetime import datetime, timedelta
 
 import numpy as np
 import polars as pl
-import pytest
 
 from common.metrics import (
-    compute_cagr,
-    compute_max_drawdown,
     compute_sharpe,
-    compute_vol,
     equity_metrics,
     infer_periods_per_year,
 )

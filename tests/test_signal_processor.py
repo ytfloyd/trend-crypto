@@ -11,10 +11,8 @@ CTO spec acceptance criteria:
 """
 from __future__ import annotations
 
-import math
 
 import polars as pl
-import pytest
 
 from alphas.signal_processor import (
     SignalProcessor,
@@ -208,7 +206,6 @@ class TestWinsorization:
 
     def test_values_within_threshold_unchanged(self):
         """Values already within bounds should not change."""
-        import numpy as np
         dates = pl.date_range(pl.date(2020, 1, 1), pl.date(2020, 1, 10), eager=True)
         vals = [0.5, -0.3, 1.2, -1.1, 0.0, 0.8, -0.5, 0.1, 0.9, -0.2]
         df = pl.DataFrame({"ts": dates, "A": vals})

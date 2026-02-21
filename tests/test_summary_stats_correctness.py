@@ -10,7 +10,6 @@ from datetime import datetime, timedelta
 
 import numpy as np
 import polars as pl
-import pytest
 
 from backtest.engine import _summary_stats
 

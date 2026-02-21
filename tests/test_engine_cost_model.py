@@ -10,7 +10,6 @@ from datetime import datetime, timedelta
 import polars as pl
 import pytest
 
-from backtest.engine import _summary_stats
 
 
 def _make_equity_with_costs(

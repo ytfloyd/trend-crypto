@@ -1,7 +1,6 @@
 """Tests for information_horizon() in scripts/research/common/metrics.py."""
 from __future__ import annotations
 
-import importlib
 import sys
 from pathlib import Path
 
