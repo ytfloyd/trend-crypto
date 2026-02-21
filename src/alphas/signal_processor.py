@@ -9,7 +9,7 @@ All transforms are disabled by default (pass-through mode).
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 import polars as pl

@@ -16,7 +16,7 @@ import pytest
 pytest.importorskip("scipy")
 sklearn = pytest.importorskip("sklearn")
 
-from portfolio.hrp import HierarchicalRiskParity
+from portfolio.hrp import HierarchicalRiskParity  # noqa: E402
 
 
 def _make_returns(n_dates: int = 200, n_symbols: int = 6, seed: int = 42) -> pd.DataFrame:
