@@ -15,18 +15,9 @@ def load_nav(path: Path) -> pl.DataFrame:
 
 def metrics(df: pl.DataFrame) -> tuple[float, float]:
     df = df.sort("ts")
-    nav = df["nav"]
-    returns = nav.pct_change().fill_null(0.0)
-    diffs = df.select(pl.col("ts").diff().dt.total_seconds()).to_series().drop_nulls()
-    dt_seconds = diffs.median() if diffs.len() > 0 else 0
-    periods_per_year = (365 * 24 * 3600 / dt_seconds) if dt_seconds and dt_seconds > 0 else 8760
-    mean = returns.mean()
-    std = returns.std(ddof=1)
-    sharpe = (mean / std) * (periods_per_year ** 0.5) if std and std > 0 else 0.0
-    running_max = nav.cum_max()
-    drawdowns = (nav / running_max) - 1
-    max_dd = drawdowns.min()
-    return sharpe, max_dd
+    from common.metrics import equity_metrics
+    m = equity_metrics(df)
+    return m["sharpe"], m["max_drawdown"]
 
 
 def main() -> None:

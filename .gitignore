@@ -20,3 +20,8 @@ configs/research/btc_eth_daily_ma_5_40_v0.yaml
 .ipynb_checkpoints/# Ignore generated artifacts
 scripts/research/sornette_lppl/_cache/
 scripts/research/sornette_lppl/output/
+
+# Research caches (large parquet files)
+scripts/research/common/_cache/
+scripts/research/jpm_momentum/_cache/
+**/_cache/

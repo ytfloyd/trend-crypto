@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Literal
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
+
+CovarianceMethod = Literal["sample", "ledoit_wolf"]
 
 
 @dataclass(frozen=True)
@@ -35,20 +40,15 @@ class HierarchicalRiskParity:
     def get_quasi_diag(link: np.ndarray) -> list[int]:
         link = link.astype(int)
         n = link.shape[0] + 1
-        sort_ix = pd.Series([link[-1, 0], link[-1, 1]])
-        while sort_ix.max() >= n:
-            sort_ix.index = range(sort_ix.shape[0])
-            for i, j in sort_ix[sort_ix >= n].items():
-                cluster = link[j - n]
-                sort_ix[i] = cluster[0]
-                sort_ix = pd.concat(
-                    [
-                        sort_ix.iloc[: i + 1],
-                        pd.Series([cluster[1]]),
-                        sort_ix.iloc[i + 1 :],
-                    ]
-                ).reset_index(drop=True)
-        return sort_ix.astype(int).tolist()
+        root = 2 * n - 2
+
+        def _recurse(node: int) -> list[int]:
+            if node < n:
+                return [node]
+            row = link[node - n]
+            return _recurse(int(row[0])) + _recurse(int(row[1]))
+
+        return _recurse(root)
 
     @staticmethod
     def get_cluster_var(cov: pd.DataFrame, cluster_items: Iterable[str]) -> float:
@@ -89,12 +89,28 @@ class HierarchicalRiskParity:
         return weights
 
     @staticmethod
-    def allocate(returns: pd.DataFrame) -> pd.Series:
+    def allocate(
+        returns: pd.DataFrame,
+        covariance_method: CovarianceMethod = "sample",
+    ) -> pd.Series:
+        """Compute HRP weights from a returns matrix.
+
+        Parameters
+        ----------
+        returns : pd.DataFrame
+            Wide-format returns with symbols as columns.
+        covariance_method : ``"sample"`` | ``"ledoit_wolf"``
+            Covariance estimation method.  ``"sample"`` uses the standard
+            sample covariance (existing behaviour, default).
+            ``"ledoit_wolf"`` applies Ledoit-Wolf shrinkage via
+            ``sklearn.covariance.LedoitWolf``.
+        """
         df = returns.dropna()
         if df.empty:
             raise ValueError("Empty after dropna; cannot allocate.")
-        cov = df.cov()
-        corr = df.corr()
+
+        cov, corr = _estimate_covariance(df, covariance_method)
+
         diag = np.diag(cov.values)
         if not np.all(np.isfinite(diag)):
             raise ValueError("Covariance diagonal contains non-finite values.")
@@ -103,3 +119,39 @@ class HierarchicalRiskParity:
         weights = HierarchicalRiskParity.get_rec_bisection(cov, sort_ix)
         weights = weights / weights.sum()
         return weights
+
+
+def _estimate_covariance(
+    df: pd.DataFrame,
+    method: CovarianceMethod,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Estimate covariance and correlation matrices.
+
+    Returns (cov, corr) DataFrames indexed/columned by symbol names.
+    """
+    if method == "sample":
+        return df.cov(), df.corr()
+
+    if method == "ledoit_wolf":
+        try:
+            from sklearn.covariance import LedoitWolf
+        except ImportError as exc:
+            raise ImportError(
+                "scikit-learn is required for Ledoit-Wolf covariance; "
+                "install scikit-learn to use covariance_method='ledoit_wolf'."
+            ) from exc
+
+        lw = LedoitWolf().fit(df.values)
+        cov = pd.DataFrame(lw.covariance_, index=df.columns, columns=df.columns)
+        logger.info("Ledoit-Wolf shrinkage coefficient: %.4f", lw.shrinkage_)
+
+        std = np.sqrt(np.diag(lw.covariance_))
+        safe_std = np.where(std > 1e-12, std, 1.0)
+        outer_std = np.outer(safe_std, safe_std)
+        corr_vals = lw.covariance_ / outer_std
+        np.fill_diagonal(corr_vals, 1.0)
+        corr = pd.DataFrame(corr_vals, index=df.columns, columns=df.columns)
+
+        return cov, corr
+
+    raise ValueError(f"Unknown covariance_method: {method!r}")

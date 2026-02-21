@@ -172,7 +172,8 @@ def main():
     n_years = len(gated_cum) / ANN_FACTOR
     gated_cagr = gated_cum.iloc[-1] ** (1 / n_years) - 1 if n_years > 0 else 0
     gated_vol = gated_ew.std() * np.sqrt(ANN_FACTOR)
-    gated_sharpe = gated_cagr / gated_vol if gated_vol > 0 else 0
+    gated_daily_std = gated_ew.std()
+    gated_sharpe = (gated_ew.mean() / gated_daily_std * np.sqrt(ANN_FACTOR)) if gated_daily_std > 1e-12 else 0
     gated_dd = gated_cum / gated_cum.cummax() - 1
     gated_maxdd = gated_dd.min()
 
@@ -180,14 +181,16 @@ def main():
     ew_cum = (1 + ew_ret).cumprod()
     ew_cagr = ew_cum.iloc[-1] ** (1 / n_years) - 1 if n_years > 0 else 0
     ew_vol = ew_ret.std() * np.sqrt(ANN_FACTOR)
-    ew_sharpe = ew_cagr / ew_vol if ew_vol > 0 else 0
+    ew_daily_std = ew_ret.std()
+    ew_sharpe = (ew_ret.mean() / ew_daily_std * np.sqrt(ANN_FACTOR)) if ew_daily_std > 1e-12 else 0
 
     # BTC
     btc_ret = returns_wide.get("BTC-USD", pd.Series(0, index=returns_wide.index))
     btc_cum = (1 + btc_ret).cumprod()
     btc_cagr = btc_cum.iloc[-1] ** (1 / n_years) - 1 if n_years > 0 else 0
     btc_vol = btc_ret.std() * np.sqrt(ANN_FACTOR)
-    btc_sharpe = btc_cagr / btc_vol if btc_vol > 0 else 0
+    btc_daily_std = btc_ret.std()
+    btc_sharpe = (btc_ret.mean() / btc_daily_std * np.sqrt(ANN_FACTOR)) if btc_daily_std > 1e-12 else 0
 
     print(f"  BTC-SMA-gated EW: CAGR={gated_cagr:.1%}  "
           f"Sharpe={gated_sharpe:.2f}  MaxDD={gated_maxdd:.1%}")

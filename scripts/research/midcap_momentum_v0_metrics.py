@@ -38,7 +38,8 @@ def compute_metrics_from_returns(
 
     # Vol and Sharpe
     vol = float(s.std() * math.sqrt(ANN_FACTOR))
-    sharpe = float(cagr / vol) if vol and not math.isnan(vol) and vol != 0.0 else float("nan")
+    daily_std = float(s.std())
+    sharpe = float((s.mean() / daily_std) * math.sqrt(ANN_FACTOR)) if daily_std > 1e-12 else float("nan")
 
     # Equity curve and max drawdown
     if equity_col is not None and equity_col in df.columns:
