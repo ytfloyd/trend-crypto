@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+pytest.importorskip("scipy")
+
 # ---------------------------------------------------------------------------
 # Import research common package.
 # scripts/research/common/ and src/common/ share the name "common".

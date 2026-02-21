@@ -14,7 +14,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from risk.kelly import apply_kelly_cap, empirical_kelly, gaussian_kelly
+pytest.importorskip("scipy")
+
+from risk.kelly import apply_kelly_cap, empirical_kelly, gaussian_kelly  # noqa: E402
 
 
 class TestEmpiricalKelly:
