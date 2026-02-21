@@ -198,11 +198,11 @@ def make_tearsheet(
         equity["portfolio_ret"]
         .rolling(63, min_periods=63)
         .std()
-        * np.sqrt(252.0)
+        * np.sqrt(365.0)
     )
     roll_std = equity["portfolio_ret"].rolling(63, min_periods=63).std()
     roll_mean = equity["portfolio_ret"].rolling(63, min_periods=63).mean()
-    equity["rolling_sharpe_63"] = (roll_mean / roll_std) * np.sqrt(252.0)
+    equity["rolling_sharpe_63"] = (roll_mean / roll_std) * np.sqrt(365.0)
 
     full_row = metrics.loc[metrics["period"] == "full"].iloc[0] if not metrics.empty else None
 
@@ -339,7 +339,7 @@ def make_tearsheet(
 
         axes[1].plot(equity["ts"], equity["rolling_sharpe_63"], label="Strategy")
         if bench_rets is not None:
-            bench_roll_sharpe = (bench_rets.rolling(63).mean() / (bench_rets.rolling(63).std() + 1e-12)) * np.sqrt(252.0)
+            bench_roll_sharpe = (bench_rets.rolling(63).mean() / (bench_rets.rolling(63).std() + 1e-12)) * np.sqrt(365.0)
             axes[1].plot(bench_roll_sharpe.index, bench_roll_sharpe.values, label=benchmark_label, linestyle="--")
             axes[1].legend()
         axes[1].set_ylabel("Sharpe (63d)")

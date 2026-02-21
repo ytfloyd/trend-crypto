@@ -292,7 +292,8 @@ def main():
     n_years = len(btc_cum) / ANN_FACTOR_HOURLY
     btc_cagr = btc_cum.iloc[-1] ** (1 / n_years) - 1 if n_years > 0 else 0
     btc_vol = btc_ret.std() * np.sqrt(ANN_FACTOR_HOURLY)
-    btc_sharpe = btc_cagr / btc_vol if btc_vol > 0 else 0
+    btc_hourly_std = btc_ret.std()
+    btc_sharpe = (btc_ret.mean() / btc_hourly_std * np.sqrt(ANN_FACTOR_HOURLY)) if btc_hourly_std > 1e-12 else 0
 
     print(f"\n{'='*70}")
     print("BENCHMARK")

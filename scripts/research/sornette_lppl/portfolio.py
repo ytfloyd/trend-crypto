@@ -210,7 +210,8 @@ def performance_summary(bt: pd.DataFrame, ann_factor: float = 365.0) -> dict:
 
     daily_rets = bt["net_ret"]
     vol = daily_rets.std() * np.sqrt(ann_factor)
-    sharpe = cagr / vol if vol > 1e-6 else 0.0
+    daily_std = daily_rets.std()
+    sharpe = (daily_rets.mean() / daily_std * np.sqrt(ann_factor)) if daily_std > 1e-12 else 0.0
 
     cum_series = bt["cum_ret"]
     drawdowns = cum_series / cum_series.cummax() - 1

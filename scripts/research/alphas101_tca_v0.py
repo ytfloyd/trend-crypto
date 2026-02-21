@@ -48,7 +48,8 @@ def compute_metrics(ret: pd.Series, ann_factor: int = 365) -> dict:
     cagr = (1.0 + total_ret) ** (ann / n) - 1.0
 
     vol = ret.std() * np.sqrt(ann)
-    sharpe = cagr / vol if vol and vol > 0 else np.nan
+    daily_std = ret.std()
+    sharpe = (ret.mean() / daily_std * np.sqrt(ann)) if daily_std > 1e-12 else np.nan
 
     eq = (1.0 + ret).cumprod()
     max_dd = (eq / eq.cummax() - 1.0).min()

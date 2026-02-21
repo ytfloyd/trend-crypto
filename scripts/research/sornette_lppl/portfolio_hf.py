@@ -249,7 +249,8 @@ def hourly_performance_summary(bt: pd.DataFrame) -> dict:
     cagr = cum ** (1 / n_years) - 1 if n_years > 0 else 0
 
     vol = bt["net_ret"].std() * np.sqrt(ann)
-    sharpe = cagr / vol if vol > 1e-6 else 0
+    hourly_std = bt["net_ret"].std()
+    sharpe = (bt["net_ret"].mean() / hourly_std * np.sqrt(ann)) if hourly_std > 1e-12 else 0
 
     dd = bt["cum_ret"] / bt["cum_ret"].cummax() - 1
     max_dd = dd.min()

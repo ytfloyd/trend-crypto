@@ -33,13 +33,10 @@ def infer_periods_per_year(ts: pl.Series) -> float:
 
 
 def sharpe(returns: pl.Series, ppy: float) -> float:
+    from common.metrics import compute_sharpe
     if not isinstance(returns, pl.Series):
         raise TypeError("sharpe() expects a polars Series, got Expr; ensure you pass df.get_column(...)")
-    mean = float(returns.mean())
-    std = float(returns.std(ddof=1))
-    if std <= 0 or isnan(std):
-        return 0.0
-    return (mean / std) * sqrt(ppy)
+    return compute_sharpe(returns, ppy)
 
 
 def max_drawdown(nav: pl.Series) -> Tuple[float, pl.Series]:
