@@ -47,7 +47,7 @@ def compute_cagr(start_nav: float, end_nav: float,
     """Compound annual growth rate."""
     if start_nav <= 0 or n_periods <= 0:
         return 0.0
-    return (end_nav / start_nav) ** (periods_per_year / n_periods) - 1.0
+    return float((end_nav / start_nav) ** (periods_per_year / n_periods) - 1.0)
 
 
 def compute_max_drawdown(nav: pl.Series) -> float:
