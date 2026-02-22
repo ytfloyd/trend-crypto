@@ -174,6 +174,7 @@ def cmd_evaluate(args: argparse.Namespace) -> None:
     _print_metric("Hit Rate", result.hit_rate, ".1%")
     _print_metric("Turnover", result.turnover)
     _print_metric("Sharpe (signal)", result.sharpe, ".2f")
+    _print_metric("R² OOS vs zero", result.r2_oos)
 
     # Quick backtest
     _print_header("Backtest")

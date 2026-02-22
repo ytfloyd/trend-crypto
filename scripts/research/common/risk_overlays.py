@@ -47,47 +47,6 @@ def apply_position_limit_wide(
     return w
 
 
-def apply_position_limit_dict(
-    weights: dict[str, float],
-    max_weight: float,
-) -> dict[str, float]:
-    """Cap individual weights in a dict and redistribute excess.
-
-    Useful inside weight-builder loops that work with per-date dicts.
-
-    Parameters
-    ----------
-    weights : dict
-        Symbol → weight.
-    max_weight : float
-        Maximum allowed weight as a fraction of total.
-    """
-    w = dict(weights)
-    for _ in range(10):
-        total = sum(w.values())
-        if total <= 0:
-            return w
-        excess = 0.0
-        uncapped = []
-        for k, v in w.items():
-            if v / total > max_weight:
-                excess += v - max_weight * total
-                w[k] = max_weight * total
-            else:
-                uncapped.append(k)
-        if excess <= 1e-10 or not uncapped:
-            break
-        uncapped_total = sum(w[k] for k in uncapped)
-        if uncapped_total > 0:
-            for k in uncapped:
-                w[k] += excess * (w[k] / uncapped_total)
-    total = sum(w.values())
-    if total > 0:
-        target = sum(weights.values())
-        w = {k: v * target / total for k, v in w.items()}
-    return w
-
-
 # ---------------------------------------------------------------------------
 # Volatility targeting
 # ---------------------------------------------------------------------------
