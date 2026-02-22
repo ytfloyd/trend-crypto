@@ -16,6 +16,85 @@ from common.logging import get_logger
 
 logger = get_logger("alpha_pipeline")
 
+# ---------------------------------------------------------------------------
+# Huber regression for robust linear signal fitting
+# ---------------------------------------------------------------------------
+HUBER_DELTA_DEFAULT = 1.345
+
+
+def huber_regression(
+    x: list[float] | pl.Series,
+    y: list[float] | pl.Series,
+    delta: float = HUBER_DELTA_DEFAULT,
+    max_iter: int = 50,
+    tol: float = 1e-6,
+) -> tuple[float, float]:
+    """Iteratively-reweighted least squares with Huber loss.
+
+    Robust alternative to OLS for fat-tailed return data.  The default
+    delta=1.345 gives 95% efficiency at the normal while strongly
+    down-weighting outliers — the same convention used in the TSFM
+    benchmarks of Rahimikia et al. (2025).
+
+    Args:
+        x: Independent variable (e.g. time index).
+        y: Dependent variable (e.g. log prices or returns).
+        delta: Huber threshold; residuals beyond ±delta are L1-penalised.
+        max_iter: IRLS iterations.
+        tol: Convergence tolerance on coefficient change.
+
+    Returns:
+        (slope, intercept)
+    """
+    if isinstance(x, pl.Series):
+        x = x.to_list()
+    if isinstance(y, pl.Series):
+        y = y.to_list()
+
+    n = len(x)
+    if n < 3 or len(y) != n:
+        return 0.0, 0.0
+
+    # Initialise with OLS
+    sx = sum(x)
+    sy = sum(y)
+    sxy = sum(xi * yi for xi, yi in zip(x, y))
+    sx2 = sum(xi * xi for xi in x)
+    denom = n * sx2 - sx * sx
+    if abs(denom) < 1e-15:
+        return 0.0, 0.0
+
+    slope = (n * sxy - sx * sy) / denom
+    intercept = (sy - slope * sx) / n
+
+    for _ in range(max_iter):
+        residuals = [yi - (slope * xi + intercept) for xi, yi in zip(x, y)]
+        weights = [
+            1.0 if abs(r) <= delta else delta / abs(r) for r in residuals
+        ]
+
+        wsum = sum(weights)
+        if wsum < 1e-15:
+            break
+        wsx = sum(w * xi for w, xi in zip(weights, x))
+        wsy = sum(w * yi for w, yi in zip(weights, y))
+        wsxy = sum(w * xi * yi for w, xi, yi in zip(weights, x, y))
+        wsx2 = sum(w * xi * xi for w, xi in zip(weights, x))
+
+        d = wsum * wsx2 - wsx * wsx
+        if abs(d) < 1e-15:
+            break
+
+        new_slope = (wsum * wsxy - wsx * wsy) / d
+        new_intercept = (wsy - new_slope * wsx) / wsum
+
+        if abs(new_slope - slope) + abs(new_intercept - intercept) < tol:
+            slope, intercept = new_slope, new_intercept
+            break
+        slope, intercept = new_slope, new_intercept
+
+    return slope, intercept
+
 
 @dataclass(frozen=True)
 class AlphaResult:
@@ -29,6 +108,8 @@ class AlphaResult:
         hit_rate: Fraction of bars where signal direction matched return direction.
         turnover: Average per-bar turnover of the signal.
         sharpe: Annualized Sharpe ratio of the signal-weighted returns.
+        r2_oos: Out-of-sample R² vs zero (Gu et al. 2020).  Positive means
+            the signal's implicit prediction beats always-predict-zero.
         n_bars: Number of bars evaluated.
         metadata: Additional metadata.
     """
@@ -40,6 +121,7 @@ class AlphaResult:
     hit_rate: float
     turnover: float
     sharpe: float
+    r2_oos: float
     n_bars: int
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -138,9 +220,14 @@ def evaluate_alpha(
     else:
         sharpe = 0.0
 
+    from backtest.metrics import r2_oos_vs_zero  # deferred to avoid circular import
+
+    r2_oos = r2_oos_vs_zero(df["ret"], df["sig"]) if df.height > 1 else 0.0
+
     logger.info(
-        "Alpha '%s': IC=%.4f, IR=%.4f, hit=%.2f%%, turnover=%.4f, sharpe=%.2f",
-        name, ic_mean, ic_ir, hit_rate * 100, turnover, sharpe,
+        "Alpha '%s': IC=%.4f, IR=%.4f, hit=%.2f%%, turnover=%.4f, "
+        "sharpe=%.2f, R2_oos=%.4f",
+        name, ic_mean, ic_ir, hit_rate * 100, turnover, sharpe, r2_oos,
     )
 
     return AlphaResult(
@@ -151,5 +238,6 @@ def evaluate_alpha(
         hit_rate=hit_rate,
         turnover=turnover,
         sharpe=sharpe,
+        r2_oos=r2_oos,
         n_bars=df.height,
     )

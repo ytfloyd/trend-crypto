@@ -176,24 +176,124 @@ def _cross_sectional_ic(
     return pd.Series(ic_values, dtype=float)
 
 
-def format_information_horizon(ih: pd.DataFrame) -> str:
-    """Pretty-print an information horizon DataFrame."""
-    header = (
-        f"{'Horizon':>8s} {'IC Mean':>10s} {'IC Std':>10s} "
-        f"{'t-stat':>10s} {'p-val':>10s} {'N':>8s} {'Hit%':>8s}"
-    )
-    lines = [header, "-" * len(header)]
-    for _, row in ih.iterrows():
-        lines.append(
-            f"{int(row['horizon']):>8d} "
-            f"{row['ic_mean']:>10.4f} "
-            f"{row['ic_std']:>10.4f} "
-            f"{row['ic_tstat']:>10.2f} "
-            f"{row['ic_pval']:>10.4f} "
-            f"{int(row['n_periods']):>8d} "
-            f"{row['hit_rate']:>7.1%}"
-        )
-    return "\n".join(lines)
+def compute_ic_decay(
+    signal: pd.DataFrame,
+    returns: pd.DataFrame,
+    horizons: Sequence[int] = (1, 5, 10, 21, 42, 63, 126, 252),
+    method: str = "spearman",
+) -> pd.DataFrame:
+    """Measure how a signal's predictive power attenuates over forward horizons.
+
+    Wraps ``information_horizon`` and adds a normalised decay curve: IC at
+    each horizon divided by the IC at the shortest horizon.  This lets you
+    compare decay rates across signals with different absolute IC levels.
+
+    Following Rahimikia et al. (2025), who find that TSFMs exhibit slower
+    IC decay than tree-based ensembles — a useful diagnostic for gauging
+    signal longevity.
+
+    Parameters
+    ----------
+    signal, returns : pd.DataFrame
+        Wide-format, index=datetime, columns=symbols.
+    horizons : sequence of int
+        Forward horizons in bars to evaluate.
+    method : str
+        'spearman' or 'pearson'.
+
+    Returns
+    -------
+    pd.DataFrame with columns from ``information_horizon`` plus:
+        ic_normalised (IC / IC_at_min_horizon), decay_rate (linear slope of
+        normalised IC vs log-horizon).
+    """
+    ih = information_horizon(signal, returns, horizons=horizons, method=method)
+    base_ic = ih.loc[ih["horizon"] == min(horizons), "ic_mean"]
+    base_val = float(base_ic.iloc[0]) if len(base_ic) > 0 and not np.isnan(base_ic.iloc[0]) else 0.0
+
+    if abs(base_val) > 1e-8:
+        ih["ic_normalised"] = ih["ic_mean"] / base_val
+    else:
+        ih["ic_normalised"] = np.nan
+
+    valid = ih.dropna(subset=["ic_normalised"])
+    if len(valid) >= 3:
+        log_h = np.log(valid["horizon"].values.astype(float))
+        ic_n = valid["ic_normalised"].values
+        slope, _, _, _, _ = stats.linregress(log_h, ic_n)
+        ih["decay_rate"] = float(slope)
+    else:
+        ih["decay_rate"] = np.nan
+
+    return ih
+
+
+def compute_yearly_sharpe_trend(
+    equity: pd.Series,
+) -> pd.DataFrame:
+    """Track year-over-year Sharpe to detect strengthening or degradation.
+
+    Following the expanding-window evaluation design of Rahimikia et al.
+    (2025), computes annualised Sharpe for each calendar year and fits a
+    linear trend.
+
+    Parameters
+    ----------
+    equity : pd.Series
+        Equity curve indexed by datetime, starting at 1.0.
+
+    Returns
+    -------
+    pd.DataFrame with columns: year, sharpe, cumulative_sharpe,
+        trend_slope, trend_label.
+    """
+    ret = equity.pct_change().dropna()
+    if len(ret) < 2:
+        return pd.DataFrame(columns=["year", "sharpe", "cumulative_sharpe",
+                                      "trend_slope", "trend_label"])
+
+    ret.index = pd.to_datetime(ret.index)
+    years = sorted(ret.index.year.unique())
+
+    rows = []
+    for yr in years:
+        yr_ret = ret[ret.index.year == yr]
+        if len(yr_ret) < 20:
+            continue
+        mu = yr_ret.mean()
+        sigma = yr_ret.std()
+        sr = float((mu / sigma) * np.sqrt(ANN_FACTOR)) if sigma > 1e-12 else np.nan
+
+        cum_ret = ret[ret.index.year <= yr]
+        cum_mu = cum_ret.mean()
+        cum_sigma = cum_ret.std()
+        cum_sr = float((cum_mu / cum_sigma) * np.sqrt(ANN_FACTOR)) if cum_sigma > 1e-12 else np.nan
+
+        rows.append({"year": yr, "sharpe": sr, "cumulative_sharpe": cum_sr})
+
+    df = pd.DataFrame(rows)
+    if len(df) < 3:
+        df["trend_slope"] = np.nan
+        df["trend_label"] = "INSUFFICIENT_DATA"
+        return df
+
+    x = np.arange(len(df), dtype=float)
+    y = df["sharpe"].values
+    mask = ~np.isnan(y)
+    if mask.sum() >= 3:
+        slope, _, _, _, _ = stats.linregress(x[mask], y[mask])
+        df["trend_slope"] = float(slope)
+        if slope < -0.05:
+            df["trend_label"] = "DEGRADING"
+        elif slope > 0.05:
+            df["trend_label"] = "STRENGTHENING"
+        else:
+            df["trend_label"] = "STABLE"
+    else:
+        df["trend_slope"] = np.nan
+        df["trend_label"] = "INSUFFICIENT_DATA"
+
+    return df
 
 
 def format_metrics_table(results: dict | list[dict], label_key: str = "label") -> str:

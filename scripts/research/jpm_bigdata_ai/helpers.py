@@ -27,7 +27,6 @@ from scripts.research.common.metrics import (  # noqa: F401
 )
 from scripts.research.common.risk_overlays import (  # noqa: F401
     apply_dd_control,
-    apply_position_limit_dict,
     apply_position_limit_wide,
     apply_trailing_stop,
     apply_vol_targeting,
@@ -303,45 +302,3 @@ def walk_forward_splits(
         i += 1
     return splits
 
-
-# ---------------------------------------------------------------------------
-# ML evaluation utilities
-# ---------------------------------------------------------------------------
-def evaluate_predictions(
-    y_true: pd.Series,
-    y_pred: pd.Series,
-) -> dict:
-    """Compute standard ML evaluation metrics for return predictions.
-
-    Returns
-    -------
-    dict with keys: ic (information coefficient / Spearman rank corr),
-        pearson_corr, rmse, mae, hit_rate (directional accuracy),
-        n_obs
-    """
-    from scipy import stats as sp_stats
-
-    mask = y_true.notna() & y_pred.notna()
-    yt = y_true[mask]
-    yp = y_pred[mask]
-    n = len(yt)
-
-    if n < 10:
-        return {k: np.nan for k in [
-            "ic", "pearson_corr", "rmse", "mae", "hit_rate", "n_obs"
-        ]}
-
-    ic = float(sp_stats.spearmanr(yt, yp).statistic)
-    pearson = float(np.corrcoef(yt, yp)[0, 1])
-    rmse = float(np.sqrt(((yt - yp) ** 2).mean()))
-    mae = float((yt - yp).abs().mean())
-    hit_rate = float(((yt > 0) == (yp > 0)).mean())
-
-    return {
-        "ic": ic,
-        "pearson_corr": pearson,
-        "rmse": rmse,
-        "mae": mae,
-        "hit_rate": hit_rate,
-        "n_obs": n,
-    }

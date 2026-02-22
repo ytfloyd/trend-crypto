@@ -37,7 +37,11 @@ from scripts.research.common.data import (
     load_daily_bars,
     filter_universe,
 )
-from scripts.research.common.metrics import compute_metrics
+from scripts.research.common.metrics import (
+    compute_metrics,
+    compute_ic_decay,
+    compute_yearly_sharpe_trend,
+)
 
 SEED = 42
 np.random.seed(SEED)
@@ -70,6 +74,18 @@ FACTOR_DEFS: dict[str, dict] = {
         "description": "12-month momentum ex last month (252-21 day return, ranked)",
         "lookback": 252,
         "skip_recent": 21,
+        "field": "return",
+        "flip": False,
+    },
+    "MOM_252D": {
+        "description": "252-day raw momentum (Rahimikia et al. 2025 window)",
+        "lookback": 252,
+        "field": "return",
+        "flip": False,
+    },
+    "MOM_512D": {
+        "description": "512-day raw momentum (Rahimikia et al. 2025 long window)",
+        "lookback": 512,
         "field": "return",
         "flip": False,
     },
@@ -416,6 +432,9 @@ def write_decay_report(results: list[dict], out_dir: Path) -> Path:
 
     for r in results:
         hl_str = f"{r['half_life_days']:.0f} days" if r["half_life_days"] else "STABLE"
+        ic_decay_str = f"{r.get('ic_decay_rate', float('nan')):.4f}" if np.isfinite(r.get("ic_decay_rate", float("nan"))) else "N/A"
+        yoy_str = r.get("yoy_sharpe_label", "N/A")
+        yoy_slope_str = f"{r.get('yoy_sharpe_slope', float('nan')):.4f}" if np.isfinite(r.get("yoy_sharpe_slope", float("nan"))) else "N/A"
         lines.extend([
             f"## FACTOR: {r['factor']}",
             f"_{r['description']}_",
@@ -426,6 +445,8 @@ def write_decay_report(results: list[dict], out_dir: Path) -> Path:
             f"| Sharpe (last 90d) | {r['sharpe_recent']:.3f} |",
             f"| Decay slope | {r['linear_slope']:.4f} ({r['decay_label']}) |",
             f"| Estimated half-life | {hl_str} |",
+            f"| IC decay rate (log-horizon) | {ic_decay_str} |",
+            f"| YoY Sharpe trend | {yoy_str} (slope={yoy_slope_str}) |",
             f"| Crowding trend (12m) | {r['crowding_trend']} |",
             f"| **Research priority** | **{r['priority']}** |",
             "",
@@ -443,6 +464,8 @@ def write_research_queue(results: list[dict], out_dir: Path) -> Path:
 
     queue = []
     for r in ranked:
+        ic_dr = r.get("ic_decay_rate", float("nan"))
+        yoy_sl = r.get("yoy_sharpe_slope", float("nan"))
         queue.append({
             "factor": r["factor"],
             "priority": r["priority"],
@@ -450,6 +473,9 @@ def write_research_queue(results: list[dict], out_dir: Path) -> Path:
             "sharpe_recent": round(r["sharpe_recent"], 4),
             "decay_label": r["decay_label"],
             "half_life_days": round(r["half_life_days"], 1) if r["half_life_days"] else None,
+            "ic_decay_rate": round(ic_dr, 4) if np.isfinite(ic_dr) else None,
+            "yoy_sharpe_label": r.get("yoy_sharpe_label"),
+            "yoy_sharpe_slope": round(yoy_sl, 4) if np.isfinite(yoy_sl) else None,
             "crowding_trend": r["crowding_trend"],
         })
 
@@ -544,6 +570,27 @@ def main() -> None:
         # Crowding proxy
         crowding = compute_crowding_proxy(signal_ranks)
 
+        # IC decay across horizons (Rahimikia et al. 2025)
+        ic_decay_df = None
+        try:
+            ic_decay_df = compute_ic_decay(signal_ranks, returns)
+            ic_decay_rate = float(ic_decay_df["decay_rate"].iloc[0])
+            log(f"  IC decay rate (log-horizon slope): {ic_decay_rate:.4f}")
+        except Exception as e:
+            ic_decay_rate = np.nan
+            log(f"  IC decay skipped: {e}")
+
+        # Year-over-year Sharpe trend
+        ls_equity = (1 + ls_returns.dropna()).cumprod()
+        yearly_df = compute_yearly_sharpe_trend(ls_equity)
+        if len(yearly_df) >= 3:
+            yoy_slope = float(yearly_df["trend_slope"].iloc[0])
+            yoy_label = yearly_df["trend_label"].iloc[0]
+            log(f"  YoY Sharpe trend: {yoy_label} (slope={yoy_slope:.4f})")
+        else:
+            yoy_slope = np.nan
+            yoy_label = "INSUFFICIENT_DATA"
+
         priority = assign_priority(
             sharpe_full, sharpe_recent,
             decay["decay_label"],
@@ -561,6 +608,9 @@ def main() -> None:
             "half_life_days": decay["half_life_days"],
             "crowding_trend": crowding["crowding_trend"],
             "corr_change_12m": crowding["corr_change_12m"],
+            "ic_decay_rate": ic_decay_rate,
+            "yoy_sharpe_slope": yoy_slope,
+            "yoy_sharpe_label": yoy_label,
             "priority": priority,
             "full_metrics": full_metrics,
         })

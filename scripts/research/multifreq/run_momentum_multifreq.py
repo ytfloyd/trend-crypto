@@ -55,6 +55,7 @@ from scripts.research.jpm_bigdata_ai.helpers import (
 # ---------------------------------------------------------------------------
 FREQUENCIES = ["8h", "4h", "1h", "30m", "5m"]
 LOOKBACK = 10
+EXTENDED_LOOKBACKS = [10, 21, 63, 126, 252, 512]
 REBAL_BARS = 5       # rebalance every 5 bars (≈ weekly at daily freq)
 WEIGHT_METHOD = "invvol"
 VOL_WINDOW = 63
@@ -117,12 +118,69 @@ def signal_lreg(group: pd.DataFrame, lookback: int) -> pd.Series:
     return log_close.rolling(lookback, min_periods=lookback).apply(_tstat, raw=False)
 
 
+def signal_lreg_huber(group: pd.DataFrame, lookback: int, delta: float = 1.345) -> pd.Series:
+    """Linear regression t-stat using Huber loss (robust to fat tails).
+
+    Same as LREG but uses IRLS with Huber loss instead of OLS, following
+    the linear model benchmarks in Rahimikia et al. (2025).  The canonical
+    implementation lives in ``src.research.alpha_pipeline.huber_regression``;
+    here we inline the core loop to avoid cross-tree import issues.
+    """
+    log_close = np.log(group["close"].shift(1))
+
+    def _tstat_huber(window):
+        if window.isna().any() or len(window) < lookback:
+            return np.nan
+        y = window.values
+        x = np.arange(len(y), dtype=float)
+        n = len(y)
+
+        # OLS init
+        sx, sy = x.sum(), y.sum()
+        sxy, sx2 = (x * y).sum(), (x * x).sum()
+        denom = n * sx2 - sx * sx
+        if abs(denom) < 1e-15:
+            return 0.0
+        slope = (n * sxy - sx * sy) / denom
+        intercept = (sy - slope * sx) / n
+
+        # IRLS with Huber weights (up to 30 iterations)
+        for _ in range(30):
+            resid = y - (slope * x + intercept)
+            w = np.where(np.abs(resid) <= delta, 1.0, delta / np.abs(resid))
+            ws = w.sum()
+            if ws < 1e-15:
+                break
+            wsx = (w * x).sum()
+            wsy = (w * y).sum()
+            wsxy = (w * x * y).sum()
+            wsx2 = (w * x * x).sum()
+            d = ws * wsx2 - wsx * wsx
+            if abs(d) < 1e-15:
+                break
+            new_slope = (ws * wsxy - wsx * wsy) / d
+            new_intercept = (wsy - new_slope * wsx) / ws
+            if abs(new_slope - slope) + abs(new_intercept - intercept) < 1e-6:
+                slope, intercept = new_slope, new_intercept
+                break
+            slope, intercept = new_slope, new_intercept
+
+        resid = y - (slope * x + intercept)
+        ss_res = (resid ** 2).sum()
+        sx2_c = (x ** 2).sum() - sx ** 2 / n
+        std_err = (ss_res / max(1, n - 2) / max(1e-15, sx2_c)) ** 0.5 if sx2_c > 0 else 0.0
+        return slope / std_err if std_err > 1e-10 else 0.0
+
+    return log_close.rolling(lookback, min_periods=lookback).apply(_tstat_huber, raw=False)
+
+
 SIGNAL_FUNCS = {
     "RET": signal_ret,
     "MAC": signal_mac,
     "EMAC": signal_emac,
     "BRK": signal_brk,
     "LREG": signal_lreg,
+    "LREG_H": signal_lreg_huber,
 }
 
 
@@ -138,13 +196,12 @@ def _compute_vol(panel: pd.DataFrame, vol_window: int = VOL_WINDOW) -> pd.DataFr
 # ---------------------------------------------------------------------------
 # Per-frequency runner
 # ---------------------------------------------------------------------------
-def run_frequency(freq: str) -> dict:
+def run_frequency(freq: str, lookback_override: int | None = None) -> dict:
     t0 = time.time()
     bpd = BARS_PER_DAY[freq]
 
-    # Scale lookback and rebalance to cover the same calendar time
-    # 10 daily bars ≈ 10 days. At freq bars, 10 days ≈ 10 × bpd bars.
-    lookback_bars = max(3, int(LOOKBACK * bpd))
+    lb = lookback_override if lookback_override is not None else LOOKBACK
+    lookback_bars = max(3, int(lb * bpd))
     rebal_bars = max(1, int(REBAL_BARS * bpd))
     vol_window_bars = max(10, int(VOL_WINDOW * bpd))
 
@@ -296,6 +353,60 @@ def run_frequency(freq: str) -> dict:
 # Main
 # ===================================================================
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--lookback-sweep", action="store_true",
+                        help="Run daily-frequency lookback sweep across EXTENDED_LOOKBACKS")
+    cli_args = parser.parse_args()
+
+    if cli_args.lookback_sweep:
+        print("=" * 70)
+        print("LOOKBACK SENSITIVITY SWEEP (daily frequency)")
+        print("=" * 70)
+        print(f"Lookbacks (days): {EXTENDED_LOOKBACKS}")
+        print(f"Signals: {list(SIGNAL_FUNCS.keys())}")
+        print()
+
+        all_results = []
+        for lb in EXTENDED_LOOKBACKS:
+            print(f"\n--- Lookback = {lb}d ---")
+            try:
+                result = run_frequency("1d", lookback_override=lb)
+                result["lookback_days"] = lb
+                all_results.append(result)
+            except Exception as e:
+                print(f"\n  [ERROR] lookback={lb}d: {e}")
+                import traceback
+                traceback.print_exc()
+                all_results.append({"freq": "1d", "lookback_days": lb,
+                                    "status": "error", "reason": str(e)})
+
+        print("\n" + "=" * 70)
+        print("LOOKBACK SWEEP SUMMARY")
+        print("=" * 70)
+        print(f"  {'LB':>5s}  {'Best Signal':<10s}  {'Sharpe':>8s}  {'CAGR':>8s}  {'MaxDD':>8s}")
+        print(f"  {'─'*5}  {'─'*10}  {'─'*8}  {'─'*8}  {'─'*8}")
+        for r in all_results:
+            if r.get("status") != "ok":
+                print(f"  {r.get('lookback_days', '?'):>5}  --- error ---")
+                continue
+            best = sorted(r["metrics"], key=lambda x: x.get("sharpe", -99), reverse=True)[0]
+            print(f"  {r['lookback_days']:>5}d  {best['signal']:<10s}  "
+                  f"{best['sharpe']:>8.2f}  {best['cagr']:>7.1%}  {best['max_dd']:>7.1%}")
+
+        cross_records = []
+        for r in all_results:
+            if r.get("status") != "ok":
+                continue
+            for m in r["metrics"]:
+                m["lookback_days"] = r["lookback_days"]
+                cross_records.append(m)
+        if cross_records:
+            pd.DataFrame(cross_records).to_csv(
+                ARTIFACT_DIR / "lookback_sweep.csv", index=False, float_format="%.4f")
+            print(f"\nSaved: {ARTIFACT_DIR / 'lookback_sweep.csv'}")
+        return
+
     print("=" * 70)
     print("MULTI-FREQUENCY MOMENTUM SHOOTOUT")
     print("=" * 70)
