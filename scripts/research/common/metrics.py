@@ -320,3 +320,34 @@ def format_metrics_table(results: dict | list[dict], label_key: str = "label") -
             f"{r.get('kurtosis', np.nan):>7.2f}"
         )
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Regime classification (shared across research modules)
+# ---------------------------------------------------------------------------
+
+def compute_regime(
+    returns_wide: pd.DataFrame,
+    btc_col: str | None = None,
+    window: int = 21,
+) -> pd.Series:
+    """Classify each day as BULL / BEAR / CHOP based on BTC rolling return.
+
+    Uses tercile breakpoints on the rolling *window*-day BTC return.
+    """
+    if btc_col is None:
+        for col in returns_wide.columns:
+            if "BTC" in col.upper():
+                btc_col = col
+                break
+    if btc_col is None or btc_col not in returns_wide.columns:
+        return pd.Series("CHOP", index=returns_wide.index)
+
+    btc_ret = returns_wide[btc_col].rolling(window).sum()
+    q33 = btc_ret.quantile(0.33)
+    q67 = btc_ret.quantile(0.67)
+
+    regime = pd.Series("CHOP", index=returns_wide.index)
+    regime[btc_ret > q67] = "BULL"
+    regime[btc_ret < q33] = "BEAR"
+    return regime
