@@ -43,7 +43,10 @@ def compute_metrics_from_returns(
         cagr = float("nan")
 
     vol = float(s.std() * math.sqrt(ANN_FACTOR))
-    sharpe = float((cagr - rf_annual) / vol) if vol and not math.isnan(vol) and vol != 0.0 else float("nan")
+    daily_std = float(s.std())
+    daily_mean = float(s.mean())
+    rf_daily = (1.0 + rf_annual) ** (1.0 / ANN_FACTOR) - 1.0
+    sharpe = float((daily_mean - rf_daily) / daily_std * math.sqrt(ANN_FACTOR)) if daily_std > 1e-12 else float("nan")
 
     if equity_col is not None and equity_col in df.columns:
         equity = df[equity_col].astype(float)
@@ -57,7 +60,8 @@ def compute_metrics_from_returns(
     downside = s[s < 0]
     downside_vol_daily = downside.std()
     downside_vol_ann = downside_vol_daily * math.sqrt(ANN_FACTOR) if downside_vol_daily and not math.isnan(downside_vol_daily) else float("nan")
-    sortino = float((cagr - rf_annual) / downside_vol_ann) if downside_vol_ann and not math.isnan(downside_vol_ann) else float("nan")
+    downside_std = float(downside_vol_daily) if downside_vol_daily and not math.isnan(downside_vol_daily) else float("nan")
+    sortino = float((daily_mean - rf_daily) / downside_std * math.sqrt(ANN_FACTOR)) if downside_std > 1e-12 else float("nan")
 
     calmar = float(cagr / abs(max_dd)) if max_dd and max_dd < 0 else float("nan")
 

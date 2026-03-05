@@ -446,34 +446,18 @@ def compute_equal_risk_portfolio(
 
 
 def metrics(df: pl.DataFrame) -> Dict[str, float]:
+    from common.metrics import equity_metrics
+    ret_col = "r_port_net" if "r_port_net" in df.columns else "r_port"
+    m = equity_metrics(df, return_col=ret_col)
     df = df.sort("ts")
     nav = df["nav"]
-    start = nav.item(0)
-    end = nav.item(nav.len() - 1)
-    total_return = (end / start) - 1 if start else 0.0
-    returns = df["r_port_net"] if "r_port_net" in df.columns else df["r_port"]
-    mean = returns.mean()
-    std = returns.std(ddof=1)
-    diffs = df.select(pl.col("ts").diff().dt.total_seconds()).to_series().drop_nulls()
-    dt_seconds = diffs.median() if diffs.len() > 0 else 0
-    periods_per_year = (365 * 24 * 3600 / dt_seconds) if dt_seconds and dt_seconds > 0 else 8760
-    sharpe = (mean / std) * (periods_per_year ** 0.5) if std and std > 0 else 0.0
-    n_periods = returns.len()
-    cagr = (end / start) ** (periods_per_year / n_periods) - 1 if start and n_periods > 0 else 0.0
     running_max = nav.cum_max()
     drawdowns = (nav / running_max) - 1
-    max_dd = drawdowns.min()
     max_dd_idx = int(drawdowns.arg_min()) if drawdowns.len() > 0 else 0
-    max_dd_ts = df["ts"].item(max_dd_idx) if drawdowns.len() > 0 else None
-    return {
-        "total_return": total_return,
-        "cagr": cagr,
-        "sharpe": sharpe,
-        "max_drawdown": max_dd,
-        "max_drawdown_ts": max_dd_ts,
-        "dd_scaler_min": df["dd_scaler"].min() if "dd_scaler" in df.columns else None,
-        "dd_scaler_median": df["dd_scaler"].median() if "dd_scaler" in df.columns else None,
-    }
+    m["max_drawdown_ts"] = df["ts"].item(max_dd_idx) if drawdowns.len() > 0 else None
+    m["dd_scaler_min"] = df["dd_scaler"].min() if "dd_scaler" in df.columns else None
+    m["dd_scaler_median"] = df["dd_scaler"].median() if "dd_scaler" in df.columns else None
+    return m
 
 
 def plot_equity(df: pl.DataFrame, out_dir: Path) -> None:

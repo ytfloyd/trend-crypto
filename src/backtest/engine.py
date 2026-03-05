@@ -333,20 +333,24 @@ def _summary_stats(equity: pl.DataFrame) -> dict[str, object]:
         return {"total_return": 0.0, "sharpe": 0.0, "max_drawdown": 0.0}
     equity = equity.sort("ts")
     nav = equity["nav"]
-    returns = nav.pct_change().fill_null(0.0)
     start_nav = float(nav.item(0))
     end_nav = float(nav.item(nav.len() - 1))
     total_return = (end_nav / start_nav) - 1 if start_nav else 0.0
     total_return_pct = total_return * 100.0
     total_return_multiple = 1.0 + total_return
+
+    # Drop the first row (pct_change produces null there; it has no prior bar)
+    returns = nav.pct_change().drop_nulls()
+
     diffs = equity.select(pl.col("ts").diff().dt.total_seconds()).to_series().drop_nulls()
     dt_seconds: float = float(diffs.median()) if diffs.len() > 0 else 0.0  # type: ignore[arg-type]
     periods_per_year: float = (365 * 24 * 3600 / dt_seconds) if dt_seconds > 0 else 8760.0
     sharpe: float
+    _STD_FLOOR = 1e-12
     if returns.len() > 1:
         mean = float(returns.mean() or 0.0)  # type: ignore[arg-type]
         std = float(returns.std(ddof=1) or 0.0)  # type: ignore[arg-type]
-        sharpe = (mean / std) * (periods_per_year**0.5) if std > 0 else 0.0
+        sharpe = (mean / std) * (periods_per_year**0.5) if std > _STD_FLOOR else 0.0
     else:
         sharpe = 0.0
     running_max = nav.cum_max()

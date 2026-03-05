@@ -23,35 +23,16 @@ def load_equity(run_dir: Path) -> pl.DataFrame:
 
 
 def metrics(df: pl.DataFrame) -> dict:
+    from common.metrics import equity_metrics
+    m = equity_metrics(df, return_col="net_ret")
     df = df.sort("ts")
     nav = df["nav"]
-    start = nav.item(0)
-    end = nav.item(nav.len() - 1)
-    total_return = (end / start) - 1 if start else 0.0
-    returns = df["net_ret"]
-    mean = returns.mean()
-    std = returns.std(ddof=1)
-    diffs = df.select(pl.col("ts").diff().dt.total_seconds()).to_series().drop_nulls()
-    dt_seconds = diffs.median() if diffs.len() > 0 else 0
-    periods_per_year = (365 * 24 * 3600 / dt_seconds) if dt_seconds and dt_seconds > 0 else 8760
-    sharpe = (mean / std) * (periods_per_year ** 0.5) if std and std > 0 else 0.0
-    n_periods = returns.len()
-    cagr = (end / start) ** (periods_per_year / n_periods) - 1 if start and n_periods > 0 else 0.0
     running_max = nav.cum_max()
     drawdowns = (nav / running_max) - 1
-    max_dd = drawdowns.min()
     max_dd_idx = int(drawdowns.arg_min()) if drawdowns.len() > 0 else 0
     max_dd_ts = df["ts"].item(max_dd_idx) if drawdowns.len() > 0 else None
-    vol_ann = std * sqrt(periods_per_year) if std is not None else 0.0
-    calmar = cagr / abs(max_dd) if max_dd != 0 else 0.0
-    return {
-        "total_return": total_return,
-        "cagr": cagr,
-        "sharpe": sharpe,
-        "max_drawdown": max_dd,
-        "max_drawdown_ts": max_dd_ts.isoformat() if max_dd_ts else None,
-        "vol_annual": vol_ann,
-        "calmar": calmar,
+    m["max_drawdown_ts"] = max_dd_ts.isoformat() if max_dd_ts else None
+    return {**m,
     }
 
 

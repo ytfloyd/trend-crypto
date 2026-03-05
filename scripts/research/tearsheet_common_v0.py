@@ -123,8 +123,10 @@ def compute_stats(eq: pd.Series, rf_annual: float = 0.0) -> Dict[str, float]:
     n_days = len(eq)
     total_return = eq.iloc[-1] / eq.iloc[0] - 1.0 if n_days > 0 else np.nan
     cagr = (1 + total_return) ** (ANN_FACTOR / n_days) - 1.0 if n_days > 0 else np.nan
-    vol = ret.std() * np.sqrt(ANN_FACTOR) if not ret.empty else np.nan
-    sharpe = (cagr - rf_annual) / vol if vol and not np.isnan(vol) else np.nan
+    daily_std = float(ret.std()) if not ret.empty else 0.0
+    vol = daily_std * np.sqrt(ANN_FACTOR)
+    rf_bar = (1 + rf_annual) ** (1 / ANN_FACTOR) - 1 if rf_annual > 0 else 0.0
+    sharpe = float(((ret.mean() - rf_bar) / daily_std) * np.sqrt(ANN_FACTOR)) if daily_std > 1e-12 else np.nan
     max_dd = compute_drawdown(eq).min() if n_days > 0 else np.nan
     return {
         "n_days": n_days,
@@ -783,8 +785,11 @@ def compute_comprehensive_stats(
     dd_periods = _top_n_drawdown_periods(equity, n=5)
     max_dd_duration = dd_periods[0]["duration_days"] if dd_periods else 0
 
-    sharpe = float((cagr - rf_annual) / vol) if vol > 1e-10 else np.nan
-    sortino = float((cagr - rf_annual) / downside_vol) if downside_vol > 1e-10 else np.nan
+    daily_std_ = float(ret.std()) if len(ret) > 1 else 0.0
+    rf_bar_ = (1 + rf_annual) ** (1 / ANN_FACTOR) - 1 if rf_annual > 0 else 0.0
+    sharpe = float(((ret.mean() - rf_bar_) / daily_std_) * np.sqrt(ANN_FACTOR)) if daily_std_ > 1e-12 else np.nan
+    neg_std_ = float(neg.std()) if len(neg) > 1 else 0.0
+    sortino = float(((ret.mean() - rf_bar_) / neg_std_) * np.sqrt(ANN_FACTOR)) if neg_std_ > 1e-12 else np.nan
     calmar = float(cagr / abs(max_dd)) if abs(max_dd) > 1e-10 else np.nan
 
     # Risk-adjusted
@@ -842,10 +847,12 @@ def compute_comprehensive_stats(
         bt = float(benchmark_equity.iloc[-1] / benchmark_equity.iloc[0] - 1.0) if bn > 0 else np.nan
         bcagr = float((1 + bt) ** (ANN_FACTOR / bn) - 1.0) if bn > 0 else np.nan
         bvol = float(br.std() * np.sqrt(ANN_FACTOR)) if not br.empty else np.nan
-        bsharpe = float((bcagr - rf_annual) / bvol) if bvol and bvol > 1e-10 else np.nan
+        br_std_ = float(br.std()) if not br.empty else 0.0
+        brf_bar_ = (1 + rf_annual) ** (1 / ANN_FACTOR) - 1 if rf_annual > 0 else 0.0
+        bsharpe = float(((br.mean() - brf_bar_) / br_std_) * np.sqrt(ANN_FACTOR)) if br_std_ > 1e-12 else np.nan
         bneg = br[br < 0]
-        bdsvol = float(bneg.std() * np.sqrt(ANN_FACTOR)) if len(bneg) > 1 else 0.0
-        bsortino = float((bcagr - rf_annual) / bdsvol) if bdsvol > 1e-10 else np.nan
+        bneg_std_ = float(bneg.std()) if len(bneg) > 1 else 0.0
+        bsortino = float(((br.mean() - brf_bar_) / bneg_std_) * np.sqrt(ANN_FACTOR)) if bneg_std_ > 1e-12 else np.nan
         bdd = compute_drawdown(benchmark_equity)
         bench_stats_dict = dict(cagr=bcagr, vol=bvol, sharpe=bsharpe, sortino=bsortino,
                                 max_dd=float(bdd.min()), win_rate=float((br > 0).mean()))

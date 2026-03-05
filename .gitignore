@@ -20,4 +20,11 @@ _cache/
 
 # Python build artifacts
 *.egg-info/
-.ipynb_checkpoints/
+.ipynb_checkpoints/# Ignore generated artifacts
+scripts/research/sornette_lppl/_cache/
+scripts/research/sornette_lppl/output/
+
+# Research caches (large parquet files)
+scripts/research/common/_cache/
+scripts/research/jpm_momentum/_cache/
+**/_cache/

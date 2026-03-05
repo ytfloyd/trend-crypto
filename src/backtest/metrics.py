@@ -30,6 +30,45 @@ def sharpe_ratio(
     return (mean / std) * math.sqrt(periods_per_year)
 
 
+def r2_oos_vs_zero(
+    actual: pl.Series,
+    predicted: pl.Series | None = None,
+) -> float:
+    """Out-of-sample R² benchmarked against a naive prediction of zero.
+
+    Following Gu et al. (2020) and Rahimikia et al. (2025):
+
+        R²_OOS = 1 - Σ(actual - predicted)² / Σ(actual²)
+
+    When predicted is None, assumes the model predicts zero for every
+    observation, reducing to R²_OOS = 0.0 (the break-even baseline).
+    A positive value means the prediction is closer to realised returns
+    than always-predict-zero; a negative value means it is worse.
+
+    This metric is preferred over standard R² for individual asset
+    returns because the historical mean excess return is noisy and
+    using it as the benchmark inflates apparent model performance.
+
+    Args:
+        actual: Realised returns or excess returns.
+        predicted: Model predictions aligned to actual.  If None,
+            the function returns 0.0 (the zero-prediction baseline).
+
+    Returns:
+        R²_OOS in decimal (not percentage).
+    """
+    if predicted is None:
+        return 0.0
+    df = pl.DataFrame({"a": actual, "p": predicted}).drop_nulls()
+    if df.height < 2:
+        return 0.0
+    ss_res = (df["a"] - df["p"]).pow(2).sum()
+    ss_tot = df["a"].pow(2).sum()
+    if ss_tot == 0:
+        return 0.0
+    return float(1.0 - ss_res / ss_tot)
+
+
 def sortino_ratio(
     returns: pl.Series, periods_per_year: float = 8760.0, risk_free: float = 0.0
 ) -> float:
@@ -151,58 +190,3 @@ def return_contribution(
     return result
 
 
-def risk_contribution(
-    weights_df: pl.DataFrame,
-    returns_by_symbol: dict[str, pl.Series],
-    periods_per_year: float = 8760.0,
-) -> dict[str, float]:
-    """Marginal risk contribution per symbol.
-
-    Uses a simple approximation: RC_i = w_i * sigma_i * rho(i, portfolio).
-    Returns annualized marginal risk contribution per symbol.
-
-    Args:
-        weights_df: DataFrame with columns: ts, symbol, held_weight.
-        returns_by_symbol: Per-symbol return series aligned to the same timestamps.
-        periods_per_year: Annualization factor.
-    """
-    symbols = sorted(returns_by_symbol.keys())
-    if not symbols:
-        return {}
-
-    # Get last-known weights as representative
-    last_ts = weights_df["ts"].max()
-    last_weights = weights_df.filter(pl.col("ts") == last_ts)
-    w: dict[str, float] = {}
-    for row in last_weights.iter_rows(named=True):
-        w[str(row["symbol"])] = float(row["held_weight"])
-
-    # Compute portfolio return series
-    port_returns_list: list[float] = [0.0] * max(
-        (r.len() for r in returns_by_symbol.values()), default=0
-    )
-    for sym in symbols:
-        rets = returns_by_symbol[sym].to_list()
-        wi = w.get(sym, 0.0)
-        for t in range(len(rets)):
-            port_returns_list[t] += wi * rets[t]
-
-    port_series = pl.Series("port", port_returns_list)
-    float(port_series.std(ddof=1) or 0.0)  # type: ignore[arg-type]
-
-    result: dict[str, float] = {}
-    for sym in symbols:
-        sym_series = returns_by_symbol[sym]
-        sym_std = float(sym_series.std(ddof=1) or 0.0)  # type: ignore[arg-type]
-        wi = w.get(sym, 0.0)
-        # Correlation via covariance
-        if sym_series.len() > 1 and port_series.len() > 1:
-            cov = float(sym_series.to_frame("a").with_columns(
-                pl.Series("b", port_returns_list[:sym_series.len()])
-            ).select(pl.corr("a", "b")).item() or 0.0)
-        else:
-            cov = 0.0
-        rc = abs(wi) * sym_std * cov * math.sqrt(periods_per_year)
-        result[sym] = rc
-
-    return result

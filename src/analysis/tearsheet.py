@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -11,15 +10,6 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-
-
-@dataclass(frozen=True)
-class TearsheetArtifacts:
-    summary: dict[str, Any]
-    quantile_equity: pl.DataFrame
-    ic_series: pl.DataFrame
-    turnover: pl.DataFrame
-    net_exposure: pl.DataFrame
 
 
 def generate_tearsheet(

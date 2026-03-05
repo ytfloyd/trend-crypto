@@ -26,29 +26,8 @@ def load_trade_count(run_dir: Path) -> Optional[int]:
 
 
 def metrics(df: pl.DataFrame) -> Dict[str, float]:
-    df = df.sort("ts")
-    nav = df["nav"]
-    start = nav.item(0)
-    end = nav.item(nav.len() - 1)
-    total_return = (end / start) - 1 if start else 0.0
-    returns = nav.pct_change().fill_null(0.0)
-    mean = returns.mean()
-    std = returns.std(ddof=1)
-    diffs = df.select(pl.col("ts").diff().dt.total_seconds()).to_series().drop_nulls()
-    dt_seconds = diffs.median() if diffs.len() > 0 else 0
-    periods_per_year = (365 * 24 * 3600 / dt_seconds) if dt_seconds and dt_seconds > 0 else 8760
-    sharpe = (mean / std) * (periods_per_year ** 0.5) if std and std > 0 else 0.0
-    running_max = nav.cum_max()
-    drawdowns = (nav / running_max) - 1
-    max_dd = drawdowns.min()
-    n_periods = returns.len()
-    cagr = (end / start) ** (periods_per_year / n_periods) - 1 if start and n_periods > 0 else 0.0
-    return {
-        "total_return": total_return,
-        "sharpe": sharpe,
-        "max_drawdown": max_dd,
-        "cagr": cagr,
-    }
+    from common.metrics import equity_metrics
+    return equity_metrics(df)
 
 
 def plot_equity(run_a: pl.DataFrame, run_b: pl.DataFrame, name_a: str, name_b: str, out_dir: Path) -> None:
