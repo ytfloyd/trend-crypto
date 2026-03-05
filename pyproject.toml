@@ -30,6 +30,10 @@ dev = [
 collect = [
   "coinbase-advanced-py>=1.0.0",
 ]
+tiingo = [
+  "tiingo>=0.5.0",
+  "requests>=2.31.0",
+]
 options = [
   "ib_insync>=0.9.86",
 ]
