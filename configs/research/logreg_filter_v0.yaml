@@ -1,0 +1,87 @@
+# Logistic Regression Probability Filter — Configuration v0
+# Run: python -m scripts.research.logreg_filter.run_experiment --config configs/research/logreg_filter_v0.yaml
+
+data:
+  start: "2017-01-01"
+  end: "2026-12-31"
+  freq: "1d"
+  min_adv_usd: 500000
+  min_history_days: 90
+
+label:
+  type: "barrier"          # "barrier" or "forward_return"
+  barrier:
+    tp_atr: 2.0
+    sl_atr: 1.0
+    horizon: 20
+    atr_window: 14
+    unresolved_policy: "conservative"
+  forward_return:
+    horizon: 20
+    threshold: 0.0
+    vol_scaled: false
+    vol_scale_k: 0.5
+    atr_window: 14
+
+features:
+  ret_windows: [1, 5, 20]
+  ma_fast: 10
+  ma_slow: 50
+  donchian_window: 20
+  atr_window: 14
+  atr_pctl_lookback: 252
+  vol_zscore_window: 20
+  btc_ret_window: 20
+  breadth_ma_window: 50
+
+model:
+  penalty: "l2"
+  C: 1.0
+  l1_ratio: 0.5
+  class_weight: null       # null or "balanced"
+  calibration: null         # null, "sigmoid", or "isotonic"
+  max_iter: 1000
+  seed: 42
+
+walk_forward:
+  train_days: 730          # 2 years
+  test_days: 63            # ~1 quarter
+  step_days: 63
+  min_train_days: 365
+
+base_strategy:
+  type: "topn_momentum"    # "topn_momentum" or "equal_weight_universe"
+  momentum_window: 20
+  top_n: 10
+  rebalance_freq: 1        # every N days
+
+overlay:
+  p_enter: 0.60
+  p_hold: 0.45
+  hold_filter: false
+  max_weight: 0.20
+  target_gross: 1.0
+  max_positions: 15
+  regime_thresholds: [0.4, 0.6]
+  regime_multipliers: [0.0, 0.5, 1.0]
+
+threshold_sweep:
+  p_enter_values: [0.50, 0.55, 0.60, 0.65, 0.70]
+
+regime:
+  enabled: true
+  mode: "heuristic"        # "heuristic" or "model"
+  # Heuristic: BTC MA slope > 0 → p_regime=1, else 0
+  heuristic_ma_window: 50
+  # Model: train separate LogReg on BTC features
+  model_features: ["ret_1", "ret_5", "ret_20", "ma_ratio", "atr_norm", "atr_pctl"]
+
+execution:
+  cost_bps: 20.0
+  execution_lag: 1         # bars between signal and execution
+
+output:
+  dir: "artifacts/research/logreg_filter"
+  save_predictions: true
+  save_trade_logs: true
+  generate_pdf: true

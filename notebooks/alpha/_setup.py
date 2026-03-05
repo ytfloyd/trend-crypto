@@ -9,6 +9,9 @@ Provides:
                 compute_btc_benchmark, ANN_FACTOR
     Backtest:   simple_backtest, DEFAULT_COST_BPS
     Metrics:    compute_metrics
+    Bayesian:   compute_bayesian_metrics, posterior_sharpe,
+                sharpe_credible_interval, p_a_beats_b, beta_hit_rate,
+                bayes_factor_positive_sharpe, parameter_robustness
     Overlays:   apply_vol_targeting, apply_dd_control, apply_position_limit_wide
     Paths:      PROJECT_ROOT, DATA_DIR, ARTIFACTS_DIR
     Libs:       np, pd, plt  (numpy, pandas, matplotlib.pyplot)
@@ -32,7 +35,9 @@ ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"
 _SRC_DIR = str(PROJECT_ROOT / "src")
 _RESEARCH_DIR = str(PROJECT_ROOT / "scripts" / "research")
 
-for _p in (_SRC_DIR, _RESEARCH_DIR):
+_PROJECT_ROOT_STR = str(PROJECT_ROOT)
+
+for _p in (_SRC_DIR, _RESEARCH_DIR, _PROJECT_ROOT_STR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
@@ -58,6 +63,17 @@ from common.backtest import simple_backtest, DEFAULT_COST_BPS       # noqa: E402
 
 # Metrics
 from common.metrics import compute_metrics                          # noqa: E402
+
+# Bayesian evaluation
+from common.bayesian import (                                       # noqa: E402
+    compute_bayesian_metrics,
+    posterior_sharpe,
+    sharpe_credible_interval,
+    p_a_beats_b,
+    beta_hit_rate,
+    bayes_factor_positive_sharpe,
+    parameter_robustness,
+)
 
 # Risk overlays
 from common.risk_overlays import (                                  # noqa: E402
