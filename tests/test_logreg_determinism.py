@@ -7,6 +7,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
+pytest.importorskip("scipy", reason="scipy required for logreg research tests")
+pytest.importorskip("sklearn", reason="sklearn required for logreg research tests")
+
 from scripts.research.logreg_filter.labels import (
     BarrierLabelConfig,
     barrier_labels,
