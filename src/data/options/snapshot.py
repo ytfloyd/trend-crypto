@@ -31,7 +31,6 @@ import polars as pl
 
 from common.logging import get_logger
 from volatility.surface import VolSlice, VolSurface
-from pricing.black_scholes import bs_iv
 from .schema import OptionsSchema
 
 logger = get_logger("ib_vol_surface")
@@ -356,10 +355,6 @@ class IBVolSurfaceCollector:
 
                 # Fall back to our own IV if IB doesn't provide one
                 mid_iv = ib_iv
-                if mid_iv is None and mid_price is not None and mid_price > 0:
-                    tte_years = float(expiry_str)  # placeholder; computed externally
-                    # Skip our own IV here; will be computed from stored data
-                    mid_iv = None
 
                 bid_iv = None
                 ask_iv = None

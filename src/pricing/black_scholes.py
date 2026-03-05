@@ -17,7 +17,7 @@ import numpy as np
 from scipy.stats import norm
 from scipy.optimize import brentq
 
-from .base import Greeks, PricingModel
+from .base import Greeks
 
 
 # ── Scalar functions (fast, no object overhead) ──────────────────────────
