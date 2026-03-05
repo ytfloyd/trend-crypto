@@ -1,0 +1,10 @@
+start: "2017-01-01"
+end: "2026-12-31"
+min_adv_usd: 500000
+min_history_days: 365
+forward_horizons: [1, 3, 5, 7, 10, 14, 21]
+min_assets_for_ic: 10
+phase2_top_n: 10
+phase2_forward_days: [1, 3, 5, 7, 10, 14, 21]
+phase2_quantiles: [0.10, 0.20, 0.30, 0.50, 0.70, 0.80, 0.90]
+output_dir: "artifacts/research/talib_scanner"
