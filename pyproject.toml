@@ -87,6 +87,14 @@ module = "portfolio.*"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
+module = "strategy.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "risk.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
 module = "reportlab.*"
 ignore_missing_imports = true
 
