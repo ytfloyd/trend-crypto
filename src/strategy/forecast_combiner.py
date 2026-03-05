@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from .forecast import FORECAST_CAP, TARGET_ABS_FORECAST
+from .forecast import FORECAST_CAP
 
 
 @dataclass
