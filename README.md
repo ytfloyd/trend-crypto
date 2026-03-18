@@ -1,62 +1,173 @@
-# Trend Crypto Backtest
+# Trend Crypto
 
-Single-asset (BTC-USD) hourly backtesting pipeline with Polars and DuckDB. The engine enforces decision-at-close and execution-at-next-open timing, with reproducible artifacts for every run.
+Systematic crypto trend-following research and trading platform. Python 3.12, Polars + DuckDB for data, Pydantic for config, GitHub Actions CI (mypy, ruff, pytest).
 
-Incubation deployment: see `deployments/v2_5_incubation/DEPLOYMENT.md`.
-
-## Setup
+## Quick Start
 
 ```bash
 python -m venv venv_trend_crypto
 source venv_trend_crypto/bin/activate
-pip install -e .
-# or, for tests/linting:
-# pip install -e .[dev]
+pip install -e .          # core
+pip install -e ".[dev]"   # + tests/linting
+pytest -q                 # verify
 ```
 
-## CI
+## Repository Layout
 
-GitHub Actions runs registry validation and `pytest -q` on pull requests and pushes to `main`.
-Optional dependencies (e.g., duckdb/polars) are skipped when missing in CI.
+```
+src/                      Core library
+  backtest/               Engine (Model B timing: signal@close, fill@open+1)
+  strategy/               Strategy implementations (MA crossover, Medallion adapter)
+  live/                   LiveRunner, MedallionSignalService
+  data/                   DuckDB collector, universe, live feed
+  risk/                   Risk overlays (vol targeting, drawdown control)
+  alphas/                 Alpha factory, formulaic alphas
+  execution/              OMS, broker interfaces
 
-## Run a backtest
+scripts/                  CLI entry points
+  collect_coinbase.py     Data collector (cron every 5 min)
+  run_medallion_live.py   Live signal service (cron/daemon/paper)
+  run_backtest.py         Config-driven backtesting
+
+scripts/research/         Research strategies
+  medallion_lite/         Flagship: cross-sectional factor model (Sharpe 1.96)
+  sornette_lppl/          LPPLS bubble detection (Sharpe 1.71)
+  common/                 Shared utilities (risk overlays, tearsheets)
+  jpm_momentum/           JPM BigData AI momentum factors
+  ...                     101 alphas, alpha lab, TSMOM, growth sleeve, etc.
+
+notebooks/alpha/          Jupyter research notebooks (00-09)
+configs/                  YAML backtest + research configs
+tests/                    67 pytest files covering core paths
+docs/                     Integration guides, strategy memos, chart reference
+deployments/              Deployment specs
+artifacts/                Run outputs (equity curves, trades, tearsheets)
+```
+
+## Strategy Inventory
+
+| Strategy | Location | Sharpe | CAGR | Status |
+|---|---|---|---|---|
+| **Medallion Lite** | `scripts/research/medallion_lite/` | **1.96** | 132.8% | Live-ready |
+| Sornette LPPLS (hourly) | `scripts/research/sornette_lppl/` | 1.71 | 126.3% | Research |
+| Simplicity Benchmark | `scripts/research/sornette_lppl/run_simplicity_benchmark.py` | 1.51 | 40.1% | Benchmark |
+| 101 Alphas Ensemble | `scripts/research/run_101_alphas_ensemble_v0.py` | — | — | Research |
+| Growth Sleeve v1.5 | `scripts/research/run_alpha_ensemble_v15_growth_backtest_v0.py` | — | — | Research |
+
+---
+
+## Medallion Lite (Flagship Strategy)
+
+Cross-sectional momentum with ensemble regime gating — full-universe event-driven portfolio.
+
+**Architecture:**
+- **Ensemble regime**: 4-component continuous [0,1] score (BTC trend, cross-sectional breadth, volatility compression, BTC momentum)
+- **Factor model**: 5 cross-sectional factors (7d momentum, volume surge, realized vol rank, proximity to high, rolling Sharpe)
+- **Portfolio**: Event-driven entries/exits — enter on composite score > 0.65, exit on factor degradation / trailing stop (15%) / max hold (336h) / regime collapse
+- **Sizing**: Inverse-volatility weighted, regime-scaled, 10% per-name cap
+
+**Run backtest:**
+```bash
+python -m scripts.research.medallion_lite.run_backtest
+```
+
+**Generate partner PDF:**
+```bash
+python -m scripts.research.medallion_lite.generate_pdf
+```
+
+**Run live signal service:**
+```bash
+# Single cycle (for cron — recommended for production)
+python scripts/run_medallion_live.py --mode once
+
+# Continuous daemon
+python scripts/run_medallion_live.py --mode daemon --interval 3600
+
+# Paper trading (integrated with LiveRunner + OMS)
+python scripts/run_medallion_live.py --mode paper
+```
+
+**Integration with execution engine:** See [`docs/medallion_integration.md`](docs/medallion_integration.md) for signal contract, architecture, and deployment options.
+
+---
+
+## Sornette LPPLS
+
+Log-Periodic Power Law Singularity bubble detection on hourly bars.
+
+**Run backtest:**
+```bash
+python -m scripts.research.sornette_lppl.run_hf_backtest
+```
+
+**Run simplicity benchmark (Donchian + ATR trailing stop):**
+```bash
+python -m scripts.research.sornette_lppl.run_simplicity_benchmark
+```
+
+**Validate backtest integrity:**
+```bash
+python -m scripts.research.sornette_lppl.validate_backtest
+```
+
+**Generate comparison report (LPPLS vs Benchmark):**
+```bash
+python -m scripts.research.sornette_lppl.generate_comparison_report
+```
+
+---
+
+## Data Pipeline
+
+**Coinbase collector** fetches 1-minute candles and aggregates to hourly bars in DuckDB.
+
+```bash
+# Run collector (typically via cron every 5 minutes)
+python scripts/collect_coinbase.py
+
+# Universe is managed in src/data/coinbase_usd_universe.py
+# Filters: USD-quoted, non-stablecoin bases, ADV > threshold
+```
+
+**Database views:** `bars_1h`, `bars_1d`, `bars_1d_clean`, `bars_4h`, `hourly_bars`, `live_signals`
+
+---
+
+## Research Notebooks
+
+| # | Notebook | Topic |
+|---|---|---|
+| 01 | `01_data_structures.ipynb` | AFML data structures |
+| 02 | `02_turtle_trader.ipynb` | Turtle trading system |
+| 04 | `04_logreg_probability_filter.ipynb` | Logistic regression filters |
+| 07 | `07_ahl_pure_momentum.ipynb` | AHL multi-speed trend-following |
+| 08 | `08_cross_rate_mean_reversion.ipynb` | Triangular arb, pairs, BTC-ratio z-score |
+| 09 | `09_realized_vol_prediction.ipynb` | Ridge regression vol prediction |
+
+---
+
+## Core Backtest Engine
+
+Single-asset (BTC-USD) hourly backtesting pipeline. Enforces decision-at-close and execution-at-next-open timing, with reproducible artifacts for every run.
+
+**CI:** GitHub Actions runs registry validation and `pytest -q` on PRs and pushes to `main`.
 
 ```bash
 python scripts/run_backtest.py --config configs/runs/btc_hourly_ma_vol_target.yaml
 ```
 
-Run buy & hold baseline:
-
+Buy & hold baseline:
 ```bash
 python scripts/run_backtest.py --config configs/runs/btc_hourly_buy_and_hold.yaml
 ```
 
 Compare two runs:
-
 ```bash
 python scripts/compare_runs.py --run_a <strategy_run_dir> --run_b <bh_run_dir> --out artifacts/compare/btc_hourly
 ```
 
-Equal-risk BTC+ETH portfolio from existing runs:
-
-```bash
-python scripts/build_equal_risk_portfolio.py \
-  --run_btc artifacts/runs/<btc_run_dir> \
-  --run_eth artifacts/runs/<eth_run_dir> \
-  --out artifacts/compare/portfolio_btc_eth_equal_risk
-```
-
 Diagnostics:
-
-```bash
-python scripts/diagnose_sleeve_correlation.py \
-  --run_btc artifacts/runs/<btc_run_dir> \
-  --run_eth artifacts/runs/<eth_run_dir> \
-  --crisis_quantile 0.2
-```
-
-Strategy diagnostics vs benchmark:
-
 ```bash
 python scripts/diagnose_strategy.py \
   --run_strategy artifacts/runs/v12_daily_portfolio_20251223 \
@@ -68,23 +179,7 @@ python scripts/diagnose_strategy.py \
   --target_vol_annual 0.80
 ```
 
-Timeframe sensitivity (1h/4h/1d) with slippage sweep:
-
-```bash
-python scripts/run_timeframe_sensitivity.py \
-  --timeframes 1h,4h,1d \
-  --slippage_grid_bps 1,3,5,10,15,20 \
-  --fee_bps 10.0 \
-  --base_config_btc configs/runs/btc_hourly_ma_vol_target.yaml \
-  --base_config_eth configs/runs/eth_hourly_ma_vol_target.yaml \
-  --out_csv artifacts/compare/timeframe_sensitivity.csv
-```
-
-Look-ahead lag diagnostic:
-
-```bash
-python scripts/check_lookahead_lag.py --config configs/runs/btc_hourly_ma_vol_target.yaml --lags 1,2
-```
+---
 
 ## Research (midcap momentum)
 
@@ -815,7 +910,3 @@ To tag the Model B engine baseline after merge:
 git tag -a engine-v1.0-model-b -m "Engine v1.0: Model B open-to-close timing + funding diagnostics"
 git push origin engine-v1.0-model-b
 ```
-
-# Days with missing hours (BTCUSD):
-#(datetime.date(2025, 10, 25), 19, datetime.datetime(2025, 10, 25, 0, 0), datetime.datetime(2025, 10, 25, 23, 0))
-#(datetime.date(2025, 11, 30), 16, datetime.datetime(2025, 11, 30, 0, 0), datetime.datetime(2025, 11, 30, 15, 0))
