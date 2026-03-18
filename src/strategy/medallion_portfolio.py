@@ -16,11 +16,9 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
-from strategy.base import PortfolioStrategy
+from strategy.base import PortfolioStrategy  # noqa: F401 (protocol reference)
 from strategy.context import StrategyContext
 
 logger = logging.getLogger("medallion_portfolio")
