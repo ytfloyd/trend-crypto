@@ -24,7 +24,7 @@ import uuid
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import duckdb
 import numpy as np
@@ -64,8 +64,8 @@ class SignalOutput:
     cycle_id: str                        # UUID for idempotency
     target_weights: dict[str, float]     # symbol → weight [0, 1]
     regime_score: float                  # [0, 1]
-    actions: list[dict]                  # list of TradeAction dicts
-    diagnostics: dict                    # n_holdings, gross_exposure, etc.
+    actions: list[dict[str, Any]]        # list of TradeAction dicts
+    diagnostics: dict[str, Any]          # n_holdings, gross_exposure, etc.
     stale: bool = False                  # True if data freshness check failed
 
 
@@ -86,7 +86,7 @@ class Holding:
 @dataclass
 class PortfolioState:
     """Persistent state between signal service cycles."""
-    holdings: dict[str, dict] = field(default_factory=dict)
+    holdings: dict[str, dict[str, Any]] = field(default_factory=dict)
     last_cycle_ts: str = ""
     last_rebalance_hour: int = 0
     cycle_count: int = 0

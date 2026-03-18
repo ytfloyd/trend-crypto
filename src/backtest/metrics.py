@@ -62,11 +62,11 @@ def r2_oos_vs_zero(
     df = pl.DataFrame({"a": actual, "p": predicted}).drop_nulls()
     if df.height < 2:
         return 0.0
-    ss_res = (df["a"] - df["p"]).pow(2).sum()
-    ss_tot = df["a"].pow(2).sum()
+    ss_res = float((df["a"] - df["p"]).pow(2).sum())
+    ss_tot = float(df["a"].pow(2).sum())
     if ss_tot == 0:
         return 0.0
-    return float(1.0 - ss_res / ss_tot)
+    return 1.0 - ss_res / ss_tot
 
 
 def sortino_ratio(
