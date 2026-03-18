@@ -285,15 +285,15 @@ class TestAPIParsing:
 
         assert df.is_empty()
 
-    def test_discover_products_filters_stables(self, collector: CoinbaseCollector) -> None:
-        """Should exclude stablecoins from product list."""
+    def test_discover_products_returns_all_quotes(self, collector: CoinbaseCollector) -> None:
+        """discover_products() returns all spot products; stablecoin filtering is now at database level."""
         mock_response = MagicMock()
         mock_response.products = [
             _make_fake_product("BTC-USD", "BTC", "USD"),
             _make_fake_product("ETH-USD", "ETH", "USD"),
-            _make_fake_product("USDC-USD", "USDC", "USD"),  # Stablecoin
-            _make_fake_product("USDT-USD", "USDT", "USD"),  # Stablecoin
-            _make_fake_product("BTC-EUR", "BTC", "EUR"),    # Not USD
+            _make_fake_product("USDC-USD", "USDC", "USD"),
+            _make_fake_product("USDT-USD", "USDT", "USD"),
+            _make_fake_product("BTC-EUR", "BTC", "EUR"),
         ]
 
         with patch.object(collector, "_get_client") as mock_client:
@@ -303,8 +303,27 @@ class TestAPIParsing:
 
         assert "BTC-USD" in symbols
         assert "ETH-USD" in symbols
-        assert "USDC-USD" not in symbols
-        assert "USDT-USD" not in symbols
+        assert "USDC-USD" in symbols
+        assert "USDT-USD" in symbols
+        assert "BTC-EUR" in symbols
+        assert len(symbols) == 5
+
+    def test_discover_products_filters_by_quote(self, collector: CoinbaseCollector) -> None:
+        """quote_currencies param restricts results."""
+        mock_response = MagicMock()
+        mock_response.products = [
+            _make_fake_product("BTC-USD", "BTC", "USD"),
+            _make_fake_product("ETH-USD", "ETH", "USD"),
+            _make_fake_product("BTC-EUR", "BTC", "EUR"),
+        ]
+
+        with patch.object(collector, "_get_client") as mock_client:
+            mock_client.return_value.get_products.return_value = mock_response
+
+            symbols = collector.discover_products(quote_currencies={"USD"})
+
+        assert "BTC-USD" in symbols
+        assert "ETH-USD" in symbols
         assert "BTC-EUR" not in symbols
 
 
