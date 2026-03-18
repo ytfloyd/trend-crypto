@@ -75,31 +75,35 @@ def fetch_products(session: requests.Session, timeout: float = 10.0, max_retries
     return resp
 
 
-def get_usd_spot_universe_ex_stables(session: requests.Session) -> List[str]:
+def get_spot_universe(
+    session: requests.Session,
+    quote_currencies: Set[str] | None = None,
+    exclude_stable_bases: bool = False,
+) -> List[str]:
     """
-    Return a sorted list of USD spot product symbols (e.g. 'SOL-USD')
-    from Coinbase Exchange, excluding stablecoin bases.
+    Return a sorted list of spot product symbols from Coinbase Exchange.
 
-    Handles both:
-    - Exchange: list[dict]
-    - Brokerage-style: {"products": [...]}
-    and also decodes bytes/str JSON payloads from fetch_products().
+    Args:
+        session: requests session.
+        quote_currencies: If provided, only return products with these quote
+            currencies (e.g. ``{"USD", "BTC"}``).  ``None`` returns all.
+        exclude_stable_bases: If True, exclude products whose base currency
+            is a stablecoin (e.g. USDC-BTC).
+
+    Handles both Exchange (list[dict]) and Brokerage-style ({"products": [...]})
+    payloads, and decodes bytes/str JSON from fetch_products().
     """
     raw = fetch_products(session)
 
-    # If fetch_products returns bytes or str, JSON-decode it.
     if isinstance(raw, (bytes, str)):
         try:
             raw = json.loads(raw)
         except Exception as e:
             raise ValueError(f"Unexpected products payload (cannot JSON-decode): {type(raw)}") from e
 
-    # Normalize into a list of product dicts.
     if isinstance(raw, dict):
-        # Advanced Trade style: {"products": [...]}
         products = raw.get("products", [])
     elif isinstance(raw, list):
-        # Exchange style: list[product_dict]
         products = raw
     else:
         raise ValueError(f"Unexpected products payload type: {type(raw)}")
@@ -107,32 +111,34 @@ def get_usd_spot_universe_ex_stables(session: requests.Session) -> List[str]:
     symbols: List[str] = []
 
     for p in products:
-        # In case individual entries are serialized as bytes/str JSON, decode them too.
         if isinstance(p, (bytes, str)):
             try:
                 p = json.loads(p)
             except Exception:
-                continue  # skip malformed item
+                continue
 
         if not isinstance(p, dict):
             continue
 
-        pid = p.get("id")  # e.g. "SOL-USD"
-        base = p.get("base_currency")  # e.g. "SOL"
-        quote = p.get("quote_currency")  # e.g. "USD"
+        pid = p.get("id")
+        base = p.get("base_currency")
+        quote = p.get("quote_currency")
 
         if not pid or not base or not quote:
             continue
 
-        # USD spot only
-        if quote != "USD":
+        if quote_currencies is not None and quote not in quote_currencies:
             continue
 
-        # Exclude stablecoin bases
-        if base.upper() in STABLE_BASES:
+        if exclude_stable_bases and base.upper() in STABLE_BASES:
             continue
 
         symbols.append(pid)
 
     return sorted(set(symbols))
+
+
+def get_usd_spot_universe_ex_stables(session: requests.Session) -> List[str]:
+    """Backward-compatible wrapper: USD products excluding stablecoin bases."""
+    return get_spot_universe(session, quote_currencies={"USD"}, exclude_stable_bases=True)
 

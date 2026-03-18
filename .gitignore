@@ -20,11 +20,26 @@ _cache/
 
 # Python build artifacts
 *.egg-info/
-.ipynb_checkpoints/# Ignore generated artifacts
+.ipynb_checkpoints/
+
+# Research generated artifacts (large files, reproducible from code)
 scripts/research/sornette_lppl/_cache/
 scripts/research/sornette_lppl/output/
+scripts/research/medallion_lite/output/
+scripts/research/medallion_lite/__pycache__/
 
 # Research caches (large parquet files)
 scripts/research/common/_cache/
 scripts/research/jpm_momentum/_cache/
 **/_cache/
+
+# Live trading state (runtime, not source)
+live_state/
+medallion_state.json
+signal_output.json
+
+# Temp / generated images
+*.png
+
+# Claude AI config
+.claude/

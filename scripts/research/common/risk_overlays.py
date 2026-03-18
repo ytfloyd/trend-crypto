@@ -189,3 +189,150 @@ def apply_trailing_stop(
     scale = (orig_sum / new_sum).fillna(0.0).clip(upper=2.0)
     w = w.multiply(scale, axis=0)
     return w
+
+
+# ---------------------------------------------------------------------------
+# Predicted-vol concentration
+# ---------------------------------------------------------------------------
+def apply_vol_concentration(
+    weights: pd.DataFrame,
+    returns_wide: pd.DataFrame,
+    close_wide: pd.DataFrame,
+    high_wide: pd.DataFrame | None = None,
+    low_wide: pd.DataFrame | None = None,
+    open_wide: pd.DataFrame | None = None,
+    vol_windows: tuple[int, ...] = (5, 10, 20),
+    train_window: int = 252,
+    refit_every: int = 21,
+    floor: float = 0.10,
+) -> pd.DataFrame:
+    """Tilt portfolio weights toward assets with the highest predicted vol.
+
+    Uses a lightweight cross-sectional vol-prediction model (Ridge regression
+    on rolling realized-vol features) to rank assets by expected next-day
+    absolute return.  Weights are multiplied by the predicted-vol percentile
+    rank, then rescaled to preserve gross exposure.
+
+    The prediction model achieves ~0.21 cross-sectional Spearman IC in crypto
+    (see notebook 09).  The overlay does not change trade direction — it only
+    concentrates capital where moves are expected to be largest.
+
+    Parameters
+    ----------
+    weights : pd.DataFrame
+        Wide-format weight matrix (index=ts, columns=symbols).
+    returns_wide : pd.DataFrame
+        Wide-format return matrix.
+    close_wide, high_wide, low_wide, open_wide : pd.DataFrame
+        Wide-format price matrices.  If high/low/open are provided,
+        Garman-Klass vol is added as a feature (more efficient estimator).
+    vol_windows : tuple[int, ...]
+        Rolling windows for close-to-close realized vol features.
+    train_window : int
+        Number of days of trailing data for fitting the Ridge model.
+    refit_every : int
+        Re-estimate model coefficients every N days.
+    floor : float
+        Minimum multiplier — prevents zeroing out positions entirely.
+        0.10 means the least-volatile name keeps at least 10% of its
+        original weight.
+    """
+    from sklearn.linear_model import Ridge
+
+    common = sorted(weights.columns.intersection(returns_wide.columns)
+                    .intersection(close_wide.columns))
+    w = weights[common].copy()
+    r = returns_wide[common].reindex(w.index)
+    c = close_wide[common].reindex(w.index)
+
+    log_ret = np.log(c / c.shift(1))
+    abs_ret_1d = log_ret.abs()
+    target = abs_ret_1d.shift(-1)
+
+    # Features per symbol: multi-window realized vol + extras
+    feat_frames = {}
+    for win in vol_windows:
+        feat_frames[f"rvol_{win}"] = log_ret.rolling(win).std()
+
+    if vol_windows:
+        short_w, long_w = min(vol_windows), max(vol_windows)
+        feat_frames["vol_compress"] = (
+            feat_frames[f"rvol_{short_w}"]
+            / feat_frames[f"rvol_{long_w}"].replace(0, np.nan)
+        )
+        feat_frames["vov"] = feat_frames[f"rvol_{short_w}"].rolling(20).std()
+
+    feat_frames["abs_ret_5d"] = abs_ret_1d.rolling(5).mean()
+
+    if (high_wide is not None and low_wide is not None
+            and open_wide is not None):
+        h = high_wide[common].reindex(w.index)
+        l = low_wide[common].reindex(w.index)
+        o = open_wide[common].reindex(w.index)
+        log_hl = np.log(h / l)
+        log_co = np.log(c / o)
+        gk_var = 0.5 * log_hl**2 - (2 * np.log(2) - 1) * log_co**2
+        feat_frames["gk_vol"] = np.sqrt(gk_var.clip(lower=0).rolling(10).mean() * ANN_FACTOR)
+        feat_frames["range_5d"] = log_hl.rolling(5).mean()
+
+    # BTC vol as a market-wide feature (broadcast)
+    btc_col = "BTC-USD" if "BTC-USD" in common else common[0]
+    btc_vol = log_ret[btc_col].rolling(10).std()
+
+    # Rolling prediction per symbol
+    pred_vol = pd.DataFrame(np.nan, index=w.index, columns=common)
+
+    for sym in common:
+        feat_cols = {}
+        for fname, fdf in feat_frames.items():
+            if sym in fdf.columns:
+                feat_cols[fname] = fdf[sym]
+        feat_cols["btc_vol"] = btc_vol
+
+        feat_df = pd.DataFrame(feat_cols)
+        tgt = target[sym] if sym in target.columns else None
+        if tgt is None:
+            continue
+
+        joined = feat_df.join(tgt.rename("target")).dropna()
+        if len(joined) < train_window + 60:
+            continue
+
+        X_all = joined.drop("target", axis=1)
+        y_all = joined["target"]
+
+        coefs = None
+        for i_dt, dt in enumerate(w.index):
+            if dt not in X_all.index:
+                continue
+            loc = X_all.index.get_loc(dt)
+            if loc < train_window:
+                continue
+
+            if i_dt % refit_every == 0 or coefs is None:
+                X_train = X_all.iloc[loc - train_window:loc]
+                y_train = y_all.iloc[loc - train_window:loc]
+                mu = X_train.mean()
+                sd = X_train.std().replace(0, 1)
+                X_norm = (X_train - mu) / sd
+                model = Ridge(alpha=1.0)
+                model.fit(X_norm, y_train)
+                coefs = model.coef_
+                intercept = model.intercept_
+                feat_mu, feat_sd = mu, sd
+
+            x_today = (X_all.loc[dt] - feat_mu) / feat_sd
+            pred_vol.loc[dt, sym] = max(intercept + np.dot(coefs, x_today.values), 0)
+
+    # Rank cross-sectionally and use as multiplier
+    rank = pred_vol.rank(axis=1, pct=True).clip(lower=floor)
+
+    w_tilted = w * rank.reindex_like(w).fillna(1.0)
+
+    # Rescale to preserve original gross exposure
+    orig_gross = w.abs().sum(axis=1)
+    new_gross = w_tilted.abs().sum(axis=1).clip(lower=1e-10)
+    scale = orig_gross / new_gross
+    w_tilted = w_tilted.mul(scale, axis=0).fillna(0.0)
+
+    return w_tilted

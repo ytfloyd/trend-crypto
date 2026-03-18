@@ -1,16 +1,19 @@
 """Coinbase Advanced Trade data collector.
 
-Fetches 1-minute OHLCV candles for all USD spot products, stores in DuckDB,
-and creates resampled views for backtesting at any timeframe.
+Fetches 1-minute OHLCV candles for ALL spot products (every quote currency),
+stores in DuckDB, and creates resampled views for backtesting at any timeframe.
+
+Design principle: collect everything, filter later.  ADV filtering, universe
+selection, and quote-currency grouping belong in database views, not here.
 
 Usage:
     collector = CoinbaseCollector(db_path="data/market.duckdb")
     collector.backfill_symbol("BTC-USD")
+    collector.backfill_symbol("ETH-BTC")
     collector.update_all()
 
-    # Top-N by ADV
-    top = collector.discover_top_n(n=200, lookback_days=90, workers=8)
-    collector.backfill_all(symbols=[s for s, _ in top], workers=8)
+    # Backfill every spot product on Coinbase
+    collector.backfill_all(workers=8)
 """
 from __future__ import annotations
 
@@ -42,14 +45,13 @@ MAX_CANDLES_PER_REQUEST = 300
 # For 1-minute candles: 300 candles = 5 hours
 WINDOW_MINUTES_1M = MAX_CANDLES_PER_REQUEST  # 300 minutes = 5 hours
 
-# Stablecoins to exclude (shared with coinbase_usd_universe.py)
-STABLE_BASES: set[str] = {
+# Kept for backward compatibility but no longer used by discover_products().
+# All filtering (stablecoins, wrapped assets, ADV) belongs in database views.
+_LEGACY_STABLE_BASES: set[str] = {
     "USDC", "USDT", "DAI", "PAX", "TUSD", "GUSD",
     "BUSD", "USDP", "PYUSD", "FDUSD", "USDS",
 }
-
-# Additional exclusions (fiats, wrapped assets)
-EXCLUDED_BASES: set[str] = STABLE_BASES | {
+_LEGACY_EXCLUDED_BASES: set[str] = _LEGACY_STABLE_BASES | {
     "EUR", "GBP", "CAD", "AUD", "JPY", "GYEN", "WBTC", "UST",
 }
 
@@ -206,17 +208,24 @@ class CoinbaseCollector:
     # Discovery
     # ──────────────────────────────────────────────
 
-    def discover_products(self) -> list[str]:
-        """Fetch all USD spot products from Coinbase, excluding stablecoins.
+    def discover_products(
+        self,
+        quote_currencies: set[str] | None = None,
+    ) -> list[str]:
+        """Fetch spot products from Coinbase.
+
+        By default returns ALL spot products (every quote currency).
+        Pass ``quote_currencies`` to restrict (e.g. ``{"USD", "BTC"}``).
 
         Returns:
-            Sorted list of product IDs (e.g. ["BTC-USD", "ETH-USD", ...]).
+            Sorted list of product IDs (e.g. ["BTC-USD", "ETH-BTC", ...]).
         """
         client = self._get_client()
         self._rate_limiter.wait()
         response = client.get_products(product_type="SPOT", get_all_products=True)
 
         symbols: list[str] = []
+        quote_counts: dict[str, int] = {}
         for product in response.products or []:
             pid = getattr(product, "product_id", None)
             quote = getattr(product, "quote_currency_id", None)
@@ -224,15 +233,17 @@ class CoinbaseCollector:
 
             if not pid or not quote or not base:
                 continue
-            if quote != "USD":
-                continue
-            if base.upper() in EXCLUDED_BASES:
+            if quote_currencies is not None and quote not in quote_currencies:
                 continue
 
             symbols.append(pid)
+            quote_counts[quote] = quote_counts.get(quote, 0) + 1
 
         symbols = sorted(set(symbols))
-        logger.info("Discovered %d USD spot products", len(symbols))
+        breakdown = ", ".join(
+            f"{q}: {n}" for q, n in sorted(quote_counts.items(), key=lambda x: -x[1])
+        )
+        logger.info("Discovered %d spot products (%s)", len(symbols), breakdown)
         return symbols
 
     # ──────────────────────────────────────────────
@@ -421,8 +432,12 @@ class CoinbaseCollector:
         workers: int = 1,
         start: datetime | None = None,
         end: datetime | None = None,
+        quote_currencies: set[str] | None = None,
     ) -> dict[str, int]:
-        """Backfill all discovered USD products.
+        """Backfill all discovered spot products.
+
+        By default discovers and backfills every spot product on Coinbase
+        (all quote currencies).  Pass ``quote_currencies`` to restrict.
 
         Args:
             min_history_days: Skip symbols with less than this many days of history.
@@ -430,12 +445,13 @@ class CoinbaseCollector:
             workers: Number of parallel threads (default 1 = sequential).
             start: Start datetime override for all symbols.
             end: End datetime override for all symbols.
+            quote_currencies: Optional set of quote currencies to limit discovery.
 
         Returns:
             Dict of {symbol: rows_inserted}.
         """
         if symbols is None:
-            symbols = self.discover_products()
+            symbols = self.discover_products(quote_currencies=quote_currencies)
 
         total = len(symbols)
         logger.info("Backfilling %d symbols (workers=%d)...", total, workers)

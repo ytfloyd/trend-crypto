@@ -80,6 +80,7 @@ from common.risk_overlays import (                                  # noqa: E402
     apply_vol_targeting,
     apply_dd_control,
     apply_position_limit_wide,
+    apply_vol_concentration,
 )
 
 # ---------------------------------------------------------------------------
