@@ -1,25 +1,31 @@
 #!/usr/bin/env python
 """CLI for Coinbase Advanced Trade data collection.
 
+Collects ALL spot products by default (every quote currency).
+ADV filtering and universe selection belong in database views, not here.
+
 Subcommands:
-  discover   List all available USD spot products
+  discover   List all available spot products
   backfill   Download full history for all or specific symbols
   update     Incremental update from last known timestamp (for cron)
   refresh    Materialize resampled clean tables (bars_1h_clean, etc.)
   status     Show DB summary (symbols, row counts, date ranges)
 
 Examples:
-  # Discover available products
+  # Discover all available spot products
   python scripts/collect_coinbase.py discover
 
-  # Backfill all USD products
-  python scripts/collect_coinbase.py backfill --all
+  # Discover only BTC-quoted products
+  python scripts/collect_coinbase.py discover --quotes BTC
 
-  # Backfill top 200 by 3-month ADV with 8 parallel workers
-  python scripts/collect_coinbase.py backfill --all --top-n 200 --workers 8
+  # Backfill every spot product on Coinbase
+  python scripts/collect_coinbase.py backfill --all --workers 8
+
+  # Backfill only USD and BTC-quoted products
+  python scripts/collect_coinbase.py backfill --all --quotes USD,BTC --workers 8
 
   # Backfill single symbol
-  python scripts/collect_coinbase.py backfill --symbol BTC-USD
+  python scripts/collect_coinbase.py backfill --symbol ETH-BTC
 
   # Incremental update (add to crontab), parallel
   python scripts/collect_coinbase.py update --workers 8
@@ -41,6 +47,7 @@ import argparse
 import logging
 import os
 import sys
+from collections import defaultdict
 from datetime import datetime, timezone
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -52,6 +59,14 @@ def _resolve_db(args: argparse.Namespace) -> str:
     if not db:
         db = "data/market.duckdb"
     return db
+
+
+def _parse_quotes(args: argparse.Namespace) -> set[str] | None:
+    """Parse --quotes flag into a set, or None for all."""
+    raw = getattr(args, "quotes", None)
+    if not raw:
+        return None
+    return {q.strip().upper() for q in raw.split(",")}
 
 
 def _make_collector(args: argparse.Namespace) -> "CoinbaseCollector":  # noqa: F821
@@ -67,12 +82,25 @@ def _make_collector(args: argparse.Namespace) -> "CoinbaseCollector":  # noqa: F
 
 def cmd_discover(args: argparse.Namespace) -> None:
     collector = _make_collector(args)
-    symbols = collector.discover_products()
+    quote_filter = _parse_quotes(args)
+    symbols = collector.discover_products(quote_currencies=quote_filter)
 
-    print(f"\nFound {len(symbols)} USD spot products:\n")
-    for i, sym in enumerate(symbols, 1):
-        print(f"  {i:3d}. {sym}")
-    print()
+    by_quote: dict[str, list[str]] = defaultdict(list)
+    for sym in symbols:
+        parts = sym.rsplit("-", 1)
+        quote = parts[1] if len(parts) == 2 else "?"
+        by_quote[quote].append(sym)
+
+    scope = "all" if quote_filter is None else ",".join(sorted(quote_filter))
+    print(f"\nFound {len(symbols)} spot products (quotes: {scope}):\n")
+
+    for quote in sorted(by_quote, key=lambda q: -len(by_quote[q])):
+        syms = by_quote[quote]
+        print(f"  ── {quote} ({len(syms)}) ──")
+        for i, sym in enumerate(syms, 1):
+            print(f"    {i:3d}. {sym}")
+        print()
+
     collector.close()
 
 
@@ -93,34 +121,15 @@ def cmd_backfill(args: argparse.Namespace) -> None:
         rows = collector.backfill_symbol(symbol=args.symbol, start=start, end=end)
         print(f"\n{args.symbol}: {rows} rows inserted")
     elif args.all:
-        # Determine universe: top-N by ADV, min-ADV filter, or all
-        top_n = getattr(args, "top_n", None)
-        min_adv = getattr(args, "min_adv", 0.0)
-        adv_lookback = getattr(args, "adv_lookback_days", 90)
-
-        symbols = None
-        if top_n or min_adv > 0:
-            n = top_n or 9999
-            adv_workers = max(workers, 8)
-            print(f"\nScanning ADV (top_n={n}, min_adv=${min_adv:,.0f}, "
-                  f"lookback={adv_lookback}d, workers={adv_workers})...")
-            top = collector.discover_top_n(
-                n=n,
-                lookback_days=adv_lookback,
-                workers=adv_workers,
-                min_adv=min_adv,
-            )
-            symbols = [sym for sym, _ in top]
-            print(f"Selected {len(symbols)} symbols by ADV filter.\n")
-
+        quote_filter = _parse_quotes(args)
         results = collector.backfill_all(
             min_history_days=args.min_history_days,
-            symbols=symbols,
             workers=workers,
             start=start,
             end=end,
+            quote_currencies=quote_filter,
         )
-        print(f"\nBackfill complete:")
+        print("\nBackfill complete:")
         for sym, rows in sorted(results.items()):
             if rows > 0:
                 print(f"  {sym}: {rows:,} rows")
@@ -201,22 +210,20 @@ def parse_args() -> argparse.Namespace:
     sub = parser.add_subparsers(dest="command", help="Subcommand")
 
     # discover
-    sub.add_parser("discover", help="List available USD spot products")
+    disc = sub.add_parser("discover", help="List available spot products")
+    disc.add_argument("--quotes", default=None,
+                      help="Comma-separated quote currencies to filter (default: all)")
 
     # backfill
     bf = sub.add_parser("backfill", help="Download full history")
-    bf.add_argument("--symbol", help="Single symbol to backfill (e.g. BTC-USD)")
-    bf.add_argument("--all", action="store_true", help="Backfill all USD products")
+    bf.add_argument("--symbol", help="Single symbol to backfill (e.g. BTC-USD, ETH-BTC)")
+    bf.add_argument("--all", action="store_true", help="Backfill all spot products")
+    bf.add_argument("--quotes", default=None,
+                    help="Comma-separated quote currencies to limit (default: all)")
     bf.add_argument("--start", help="Start date (ISO8601, default: auto-discover)")
     bf.add_argument("--end", help="End date (ISO8601, default: now)")
     bf.add_argument("--min-history-days", type=int, default=0,
                     help="Skip symbols with less history (default: 0 = keep all)")
-    bf.add_argument("--top-n", type=int, default=None,
-                    help="Select top N symbols by ADV before backfilling")
-    bf.add_argument("--min-adv", type=float, default=0.0,
-                    help="Minimum average daily notional (USD) to include (default: 0)")
-    bf.add_argument("--adv-lookback-days", type=int, default=90,
-                    help="Lookback days for ADV calculation (default: 90)")
     bf.add_argument("--workers", type=int, default=1,
                     help="Parallel workers for backfill (default: 1 = sequential)")
 
