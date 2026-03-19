@@ -9,27 +9,13 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-# Re-export shared infrastructure
+# Re-export shared data infrastructure
 from scripts.research.common.data import (  # noqa: F401
     ANN_FACTOR,
     DEFAULT_DB,
     compute_btc_benchmark,
     filter_universe,
     load_daily_bars,
-)
-from scripts.research.common.backtest import (  # noqa: F401
-    DEFAULT_COST_BPS,
-    simple_backtest,
-)
-from scripts.research.common.metrics import (  # noqa: F401
-    compute_metrics,
-    format_metrics_table,
-)
-from scripts.research.common.risk_overlays import (  # noqa: F401
-    apply_dd_control,
-    apply_position_limit_wide,
-    apply_trailing_stop,
-    apply_vol_targeting,
 )
 
 # ---------------------------------------------------------------------------

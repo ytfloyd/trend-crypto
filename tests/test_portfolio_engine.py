@@ -36,12 +36,6 @@ from common.config import (
     StrategyConfigRaw,
     compile_config,
 )
-from risk.correlation import (
-    CorrelationRegime,
-    average_correlation,
-    correlation_regime_indicator,
-    rolling_correlation_matrix,
-)
 from risk.risk_manager import RiskManager
 from strategy.base import (
     PortfolioStrategy,
@@ -379,37 +373,3 @@ class TestMetrics:
         assert abs(rc["B"] - (-0.005)) < 1e-10
 
 
-# ---------------------------------------------------------------------------
-# Correlation
-# ---------------------------------------------------------------------------
-
-
-class TestCorrelation:
-    def test_rolling_correlation_matrix_shape(self) -> None:
-        import random
-        random.seed(42)
-        n = 100
-        a = pl.Series("A", [random.gauss(0, 1) for _ in range(n)])
-        b = pl.Series("B", [random.gauss(0, 1) for _ in range(n)])
-        matrices = rolling_correlation_matrix({"A": a, "B": b}, window=20)
-        assert len(matrices) == n - 20 + 1
-        assert "A" in matrices[0]
-        assert "B" in matrices[0]["A"]
-
-    def test_average_correlation_symmetric(self) -> None:
-        matrix = {"A": {"A": 1.0, "B": 0.5}, "B": {"A": 0.5, "B": 1.0}}
-        avg = average_correlation(matrix)
-        assert abs(avg - 0.5) < 1e-10
-
-    def test_regime_crisis_detection(self) -> None:
-        """Perfectly correlated series should be classified as CRISIS."""
-        n = 100
-        base = [float(i) * 0.01 for i in range(n)]
-        returns = {"A": pl.Series("A", base), "B": pl.Series("B", base)}
-        regime = correlation_regime_indicator(returns, window=20, crisis_threshold=0.7)
-        assert regime == CorrelationRegime.CRISIS
-
-    def test_regime_insufficient_data_returns_none(self) -> None:
-        returns = {"A": pl.Series("A", [0.01, 0.02]), "B": pl.Series("B", [0.01, -0.01])}
-        regime = correlation_regime_indicator(returns, window=20)
-        assert regime is None

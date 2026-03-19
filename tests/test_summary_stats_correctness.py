@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import numpy as np
 import polars as pl
 
-from backtest.engine import _summary_stats
+from backtest._execution import compute_summary_stats as _summary_stats
 
 
 def _make_equity(

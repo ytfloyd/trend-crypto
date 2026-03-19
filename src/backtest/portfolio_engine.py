@@ -13,6 +13,7 @@ from typing import Optional, Union
 
 import polars as pl
 
+from backtest._execution import apply_deadband, apply_dd_throttle, compute_summary_stats
 from backtest.portfolio_result import PortfolioResult
 from backtest.validators import validate_bars
 from common.config import PortfolioConfig, RunConfigResolved
@@ -178,18 +179,15 @@ class PortfolioEngine:
             target_idx = t - lag if t - lag >= 0 else 0
             target_w = risk_targets[target_idx]
 
-            # Drawdown throttle
             if nav_prev > peak_nav:
                 peak_nav = nav_prev
-            current_dd = 1 - (nav_prev / peak_nav) if peak_nav > 0 else 0.0
+            dd_scaler, current_dd = apply_dd_throttle(
+                nav_prev, peak_nav,
+                self.cfg.execution.max_allowed_drawdown,
+                self.cfg.execution.dd_throttle_floor,
+                self.cfg.execution.enable_dd_throttle,
+            )
             dd_list.append(current_dd)
-
-            dd_scaler = 1.0
-            if self.cfg.execution.enable_dd_throttle:
-                dd_scaler = max(
-                    self.cfg.execution.dd_throttle_floor,
-                    min(1.0, 1 - current_dd / self.cfg.execution.max_allowed_drawdown),
-                )
 
             # Apply portfolio constraints: gross leverage + single name limits
             constrained_w: dict[str, float] = {}
@@ -202,20 +200,16 @@ class PortfolioEngine:
                 scale = max_gross / gross
                 constrained_w = {s: v * scale for s, v in constrained_w.items()}
 
-            # Deadband + step limit
             bar_turnover = 0.0
             bar_cost_ret = 0.0
             for sym in symbols:
                 prev = w_held[sym]
                 tgt = constrained_w.get(sym, 0.0)
-                delta = tgt - prev
-                if abs(delta) < db:
+                new_w = apply_deadband(tgt, prev, db, self.cfg.execution.max_weight_step)
+                if new_w == prev:
                     continue
-                step = self.cfg.execution.max_weight_step
-                if step is not None:
-                    delta = max(min(delta, step), -step)
-                w_held[sym] = prev + delta
-                sym_turnover = abs(delta)
+                w_held[sym] = new_w
+                sym_turnover = abs(new_w - prev)
                 sym_cost = sym_turnover * (fee_slip_bps / 10000.0)
                 bar_turnover += sym_turnover
                 bar_cost_ret += sym_cost
@@ -266,7 +260,12 @@ class PortfolioEngine:
         contributions_df = pl.DataFrame(contribution_records)
         trades_df = pl.DataFrame(trade_records)
 
-        summary = _portfolio_summary(equity_df, trade_count, symbols)
+        summary = dict(compute_summary_stats(equity_df))
+        summary["trade_count"] = trade_count
+        summary["total_turnover"] = float(equity_df["turnover"].sum() or 0.0)
+        summary["total_cost"] = float(equity_df["cost_ret"].sum() or 0.0)
+        summary["n_symbols"] = len(symbols)
+        summary["symbols"] = symbols
 
         return PortfolioResult(
             equity_df=equity_df,
@@ -277,50 +276,3 @@ class PortfolioEngine:
         )
 
 
-def _portfolio_summary(
-    equity: pl.DataFrame, trade_count: int, symbols: list[str]
-) -> dict[str, object]:
-    """Compute aggregate portfolio performance statistics."""
-    if equity.is_empty():
-        return {"total_return": 0.0, "sharpe": 0.0, "max_drawdown": 0.0}
-    equity = equity.sort("ts")
-    nav = equity["nav"]
-    returns = nav.pct_change().fill_null(0.0)
-    start_nav = float(nav.item(0))
-    end_nav = float(nav.item(nav.len() - 1))
-    total_return = (end_nav / start_nav) - 1 if start_nav else 0.0
-
-    diffs = equity.select(pl.col("ts").diff().dt.total_seconds()).to_series().drop_nulls()
-    dt_seconds: float = float(diffs.median()) if diffs.len() > 0 else 0.0  # type: ignore[arg-type]
-    periods_per_year: float = (365 * 24 * 3600 / dt_seconds) if dt_seconds > 0 else 8760.0
-
-    sharpe: float = 0.0
-    sortino: float = 0.0
-    if returns.len() > 1:
-        mean = float(returns.mean() or 0.0)  # type: ignore[arg-type]
-        std = float(returns.std(ddof=1) or 0.0)  # type: ignore[arg-type]
-        sharpe = (mean / std) * (periods_per_year ** 0.5) if std > 0 else 0.0
-        downside = returns.filter(returns < 0)
-        down_std = float(downside.std(ddof=1) or 0.0) if downside.len() > 1 else 0.0  # type: ignore[arg-type]
-        sortino = (mean / down_std) * (periods_per_year ** 0.5) if down_std > 0 else 0.0
-
-    running_max = nav.cum_max()
-    drawdowns = (nav / running_max) - 1
-    max_drawdown = float(drawdowns.min() or 0.0)  # type: ignore[arg-type]
-
-    total_turnover = float(equity["turnover"].sum() or 0.0)
-    total_cost = float(equity["cost_ret"].sum() or 0.0)
-
-    return {
-        "total_return": total_return,
-        "total_return_pct": total_return * 100.0,
-        "sharpe": sharpe,
-        "sortino": sortino,
-        "max_drawdown": max_drawdown,
-        "trade_count": trade_count,
-        "total_turnover": total_turnover,
-        "total_cost": total_cost,
-        "n_symbols": len(symbols),
-        "symbols": symbols,
-        "n_bars": equity.height,
-    }

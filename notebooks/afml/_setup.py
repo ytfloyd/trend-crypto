@@ -7,11 +7,12 @@ Usage (first cell):
 Provides:
     Data:       load_daily_bars, load_bars, filter_universe,
                 compute_btc_benchmark, ANN_FACTOR
-    Backtest:   simple_backtest, DEFAULT_COST_BPS
-    Metrics:    compute_metrics
     AFML:       (all src/afml modules as they are built)
     Paths:      PROJECT_ROOT, DATA_DIR, ARTIFACTS_DIR
     Libs:       np, pd, plt  (numpy, pandas, matplotlib.pyplot)
+
+NOTE: Ad hoc backtesting helpers (simple_backtest, compute_metrics)
+      have been removed.  All backtesting must use src/backtest/.
 """
 from __future__ import annotations
 
@@ -54,12 +55,6 @@ from common.data import (                                           # noqa: E402
     compute_btc_benchmark,
     ANN_FACTOR,
 )
-
-# Backtesting
-from common.backtest import simple_backtest, DEFAULT_COST_BPS       # noqa: E402
-
-# Metrics
-from common.metrics import compute_metrics                          # noqa: E402
 
 # AFML library
 import afml.bars                                                    # noqa: E402
