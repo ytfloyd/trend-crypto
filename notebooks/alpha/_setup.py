@@ -7,14 +7,16 @@ Usage (first cell):
 Provides:
     Data:       load_daily_bars, load_bars, filter_universe,
                 compute_btc_benchmark, ANN_FACTOR
-    Backtest:   simple_backtest, DEFAULT_COST_BPS
-    Metrics:    compute_metrics
     Bayesian:   compute_bayesian_metrics, posterior_sharpe,
                 sharpe_credible_interval, p_a_beats_b, beta_hit_rate,
                 bayes_factor_positive_sharpe, parameter_robustness
-    Overlays:   apply_vol_targeting, apply_dd_control, apply_position_limit_wide
     Paths:      PROJECT_ROOT, DATA_DIR, ARTIFACTS_DIR
     Libs:       np, pd, plt  (numpy, pandas, matplotlib.pyplot)
+
+NOTE: Ad hoc backtesting helpers (simple_backtest, quick_backtest,
+      compute_metrics, risk overlays) have been removed.
+      All backtesting must use src/backtest/engine.py or
+      src/backtest/portfolio_engine.py.
 """
 from __future__ import annotations
 
@@ -58,12 +60,6 @@ from common.data import (                                           # noqa: E402
     ANN_FACTOR,
 )
 
-# Backtesting
-from common.backtest import simple_backtest, DEFAULT_COST_BPS       # noqa: E402
-
-# Metrics
-from common.metrics import compute_metrics                          # noqa: E402
-
 # Bayesian evaluation
 from common.bayesian import (                                       # noqa: E402
     compute_bayesian_metrics,
@@ -73,14 +69,6 @@ from common.bayesian import (                                       # noqa: E402
     beta_hit_rate,
     bayes_factor_positive_sharpe,
     parameter_robustness,
-)
-
-# Risk overlays
-from common.risk_overlays import (                                  # noqa: E402
-    apply_vol_targeting,
-    apply_dd_control,
-    apply_position_limit_wide,
-    apply_vol_concentration,
 )
 
 # ---------------------------------------------------------------------------
@@ -103,85 +91,5 @@ plt.rcParams.update({
 })
 
 # ---------------------------------------------------------------------------
-# Convenience helpers
-# ---------------------------------------------------------------------------
-
-def quick_backtest(
-    weights: pd.DataFrame,
-    returns: pd.DataFrame,
-    cost_bps: float = DEFAULT_COST_BPS,
-    label: str = "strategy",
-) -> dict:
-    """Run simple_backtest and return {label, metrics, equity}."""
-    bt = simple_backtest(weights, returns, cost_bps=cost_bps)
-    if bt.empty or len(bt) < 30:
-        return {"label": label, "metrics": {}, "equity": pd.Series(dtype=float)}
-    eq = bt.set_index("ts")["portfolio_equity"]
-    metrics = compute_metrics(eq)
-    metrics["avg_turnover"] = float(bt["turnover"].mean())
-    metrics["avg_gross"] = float(bt["gross_exposure"].mean())
-    return {"label": label, "metrics": metrics, "equity": eq}
-
-
-def plot_equity(results: list[dict], title: str = "Equity Curves", log: bool = True):
-    """Plot equity curves from a list of quick_backtest results."""
-    colors = [NAVY, TEAL, RED, GOLD, GREEN, GRAY]
-    fig, ax = plt.subplots()
-    for i, r in enumerate(results):
-        if r["equity"].empty:
-            continue
-        ax.plot(r["equity"].index, r["equity"].values,
-                label=r["label"], color=colors[i % len(colors)],
-                lw=1.8 if i == 0 else 1.2, alpha=1.0 if i == 0 else 0.7)
-    if log:
-        ax.set_yscale("log")
-    ax.set_title(title, fontweight="bold", fontsize=12)
-    ax.set_ylabel("Equity (log)" if log else "Equity")
-    ax.legend(fontsize=9, frameon=True, facecolor="white", edgecolor=LGRAY)
-    fig.tight_layout()
-    return fig, ax
-
-
-def plot_drawdowns(results: list[dict], title: str = "Drawdowns"):
-    """Plot drawdown curves from a list of quick_backtest results."""
-    colors = [NAVY, TEAL, RED, GOLD, GREEN, GRAY]
-    fig, ax = plt.subplots(figsize=(12, 4))
-    for i, r in enumerate(results):
-        if r["equity"].empty:
-            continue
-        dd = r["equity"] / r["equity"].cummax() - 1.0
-        ax.fill_between(dd.index, dd.values, 0, alpha=0.15, color=colors[i % len(colors)])
-        ax.plot(dd.index, dd.values, label=r["label"],
-                color=colors[i % len(colors)], lw=0.8)
-    ax.set_title(title, fontweight="bold", fontsize=12)
-    ax.set_ylabel("Drawdown")
-    ax.legend(fontsize=9, loc="lower left", frameon=True, facecolor="white", edgecolor=LGRAY)
-    fig.tight_layout()
-    return fig, ax
-
-
-def metrics_table(results: list[dict]) -> pd.DataFrame:
-    """Return a tidy DataFrame of metrics from quick_backtest results."""
-    rows = []
-    for r in results:
-        m = r.get("metrics", {})
-        if not m:
-            continue
-        row = {"strategy": r["label"]}
-        row.update(m)
-        rows.append(row)
-    df = pd.DataFrame(rows)
-    fmt_cols = ["cagr", "vol", "max_dd", "hit_rate", "avg_gross"]
-    for c in fmt_cols:
-        if c in df.columns:
-            df[c] = df[c].map(lambda x: f"{x:.1%}" if pd.notna(x) else "")
-    num_cols = ["sharpe", "sortino", "calmar", "skewness", "avg_turnover"]
-    for c in num_cols:
-        if c in df.columns:
-            df[c] = df[c].map(lambda x: f"{x:.2f}" if pd.notna(x) else "")
-    return df.set_index("strategy")
-
-
-# ---------------------------------------------------------------------------
 print(f"[setup] Project: {PROJECT_ROOT.name}  |  DuckDB: {DATA_DIR / 'market.duckdb'}")
-print(f"[setup] Ready — np, pd, plt, load_daily_bars, simple_backtest, compute_metrics, ...")
+print(f"[setup] Ready — np, pd, plt, load_daily_bars, ANN_FACTOR, ...")

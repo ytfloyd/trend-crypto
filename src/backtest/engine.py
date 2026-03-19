@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import math
 import polars as pl
 
+from backtest._execution import apply_deadband, apply_dd_throttle, compute_summary_stats
 from backtest.portfolio import Portfolio
 from backtest.validators import validate_bars, validate_context_bounds
 from common.config import RunConfigResolved
@@ -168,31 +169,21 @@ class BacktestEngine:
             asset_ret = asset_ret_list[t]
             raw_target = w_signal[t - lag] if t - lag >= 0 else 0.0
             w_prev = w_held_list[-1]
-            # drawdown throttle on target
             if nav_prev > peak_nav:
                 peak_nav = nav_prev
-            current_dd = 1 - (nav_prev / peak_nav) if peak_nav > 0 else 0.0
+            dd_scaler, current_dd = apply_dd_throttle(
+                nav_prev, peak_nav,
+                self.cfg.execution.max_allowed_drawdown,
+                self.cfg.execution.dd_throttle_floor,
+                self.cfg.execution.enable_dd_throttle,
+            )
             dd_list.append(current_dd)
-            if self.cfg.execution.enable_dd_throttle:
-                dd_scaler = max(
-                    self.cfg.execution.dd_throttle_floor,
-                    min(1.0, 1 - current_dd / self.cfg.execution.max_allowed_drawdown),
-                )
-            else:
-                dd_scaler = 1.0
             dd_scaler_list.append(dd_scaler)
             effective_max_weight = dd_scaler
             if abs(raw_target) > effective_max_weight:
                 raw_target = math.copysign(effective_max_weight, raw_target)
-            delta = raw_target - w_prev
             db = self.cfg.execution.rebalance_deadband or 0.0
-            if abs(delta) < db:
-                w_held = w_prev
-            else:
-                step = self.cfg.execution.max_weight_step
-                if step is not None:
-                    delta = max(min(delta, step), -step)
-                w_held = w_prev + delta
+            w_held = apply_deadband(raw_target, w_prev, db, self.cfg.execution.max_weight_step)
             turnover = abs(w_held - w_prev)
             if turnover > 0:
                 trade_count += 1
@@ -289,7 +280,7 @@ class BacktestEngine:
             )
         portfolio.position_history = position_rows
 
-        summary = _summary_stats(equity_df)
+        summary = dict(compute_summary_stats(equity_df))
         summary["entry_exit_events"] = entry_exit_events
         summary["cash_yield_annual"] = self.cfg.execution.cash_yield_annual
         summary["avg_cash_weight"] = float(sum(cash_weight_list)) / float(len(cash_weight_list)) if cash_weight_list else 0.0
@@ -328,40 +319,4 @@ class BacktestEngine:
         return portfolio, summary
 
 
-def _summary_stats(equity: pl.DataFrame) -> dict[str, object]:
-    if equity.is_empty():
-        return {"total_return": 0.0, "sharpe": 0.0, "max_drawdown": 0.0}
-    equity = equity.sort("ts")
-    nav = equity["nav"]
-    start_nav = float(nav.item(0))
-    end_nav = float(nav.item(nav.len() - 1))
-    total_return = (end_nav / start_nav) - 1 if start_nav else 0.0
-    total_return_pct = total_return * 100.0
-    total_return_multiple = 1.0 + total_return
-
-    # Drop the first row (pct_change produces null there; it has no prior bar)
-    returns = nav.pct_change().drop_nulls()
-
-    diffs = equity.select(pl.col("ts").diff().dt.total_seconds()).to_series().drop_nulls()
-    dt_seconds: float = float(diffs.median()) if diffs.len() > 0 else 0.0  # type: ignore[arg-type]
-    periods_per_year: float = (365 * 24 * 3600 / dt_seconds) if dt_seconds > 0 else 8760.0
-    sharpe: float
-    _STD_FLOOR = 1e-12
-    if returns.len() > 1:
-        mean = float(returns.mean() or 0.0)  # type: ignore[arg-type]
-        std = float(returns.std(ddof=1) or 0.0)  # type: ignore[arg-type]
-        sharpe = (mean / std) * (periods_per_year**0.5) if std > _STD_FLOOR else 0.0
-    else:
-        sharpe = 0.0
-    running_max = nav.cum_max()
-    drawdowns = (nav / running_max) - 1
-    max_drawdown = float(drawdowns.min() or 0.0)  # type: ignore[arg-type]
-    return {
-        "total_return": total_return,
-        "total_return_decimal": total_return,
-        "total_return_pct": total_return_pct,
-        "total_return_multiple": total_return_multiple,
-        "sharpe": sharpe,
-        "max_drawdown": max_drawdown,
-    }
 
