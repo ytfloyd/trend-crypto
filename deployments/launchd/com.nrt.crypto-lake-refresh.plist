@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.nrt.crypto-lake-refresh</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/russellfloyd/Dropbox/NRT/nrt_dev/trend_crypto/scripts/cron_update_lake.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/russellfloyd/Dropbox/NRT/nrt_dev/trend_crypto</string>
+
+    <!-- Run every day at 03:30 local time. macOS coalesces this if the
+         machine was asleep at the trigger time and runs it on wake. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>3</integer>
+        <key>Minute</key>
+        <integer>30</integer>
+    </dict>
+
+    <!-- Run a "missed" job once if the machine was offline at 03:30. -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <!-- launchd appends to these files; the wrapper itself rotates its own
+         per-run logs under repo/logs/, but stdout/stderr from launchd's
+         shell setup is captured here. -->
+    <key>StandardOutPath</key>
+    <string>/Users/russellfloyd/Dropbox/NRT/nrt_dev/trend_crypto/logs/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/russellfloyd/Dropbox/NRT/nrt_dev/trend_crypto/logs/launchd.err.log</string>
+
+    <!-- Make sure the job has a sane PATH; cron_update_lake.sh re-exports
+         this anyway, but launchd's default is even more minimal. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/anaconda3/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>/Users/russellfloyd</string>
+    </dict>
+</dict>
+</plist>

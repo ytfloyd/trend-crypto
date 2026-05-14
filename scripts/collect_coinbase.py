@@ -146,10 +146,102 @@ def cmd_backfill(args: argparse.Namespace) -> None:
 def cmd_update(args: argparse.Namespace) -> None:
     collector = _make_collector(args)
     workers = getattr(args, "workers", 1)
+    max_stale_days = getattr(args, "max_stale_days", 0) or 0
 
     if args.symbol:
         rows = collector.update_symbol(args.symbol)
         print(f"{args.symbol}: {rows} new rows")
+        collector.close()
+        return
+
+    # Stale-symbol filter: skip symbols whose last_ts is older than N days.
+    # Coinbase often returns 0 rows for delisted symbols across thousands of
+    # 5-hour windows, which wastes minutes per dead pair on every run.
+    if max_stale_days > 0:
+        import duckdb as _duckdb
+        from datetime import timezone as _tz, timedelta as _td
+
+        cutoff = datetime.now(_tz.utc) - _td(days=max_stale_days)
+        # Reuse the collector's existing connection — opening a second
+        # connection (even read-only) conflicts on the same file.
+        rows = collector._conn.execute(
+            "SELECT symbol, MAX(ts) FROM candles_1m GROUP BY symbol"
+        ).fetchall()
+
+        to_run: list[str] = []
+        skipped: list[str] = []
+        for sym, last_ts in rows:
+            if last_ts is None:
+                continue
+            if last_ts.tzinfo is None:
+                last_ts = last_ts.replace(tzinfo=_tz.utc)
+            if last_ts >= cutoff:
+                to_run.append(sym)
+            else:
+                skipped.append(sym)
+        print(
+            f"stale filter: keeping {len(to_run)}, skipping "
+            f"{len(skipped)} (>{max_stale_days}d behind)"
+        )
+        if skipped:
+            print(f"  skipped: {', '.join(sorted(skipped)[:10])}"
+                  f"{' …' if len(skipped) > 10 else ''}")
+
+        # Run only the live subset, sequentially-fanned across workers.
+        results: dict[str, int] = {}
+        if not to_run:
+            print("Nothing to update.")
+            collector.close()
+            return
+        if workers <= 1:
+            for sym in to_run:
+                try:
+                    results[sym] = collector.update_symbol(sym)
+                except Exception as exc:
+                    print(f"{sym}: update failed: {exc}")
+                    results[sym] = 0
+        else:
+            import threading
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            client_lock = threading.Lock()
+            thread_clients: dict[int, object] = {}
+            thread_conns: dict[int, object] = {}
+
+            def _resources():
+                tid = threading.get_ident()
+                if tid not in thread_clients:
+                    with client_lock:
+                        if tid not in thread_clients:
+                            thread_clients[tid] = collector._create_client()
+                            thread_conns[tid] = collector._open_conn()
+                return thread_clients[tid], thread_conns[tid]
+
+            def _worker(sym: str) -> tuple[str, int]:
+                try:
+                    cli, conn = _resources()
+                    return sym, collector.update_symbol(sym, _client=cli, _conn=conn)
+                except Exception as exc:
+                    print(f"{sym}: update failed: {exc}")
+                    return sym, 0
+
+            with ThreadPoolExecutor(max_workers=workers) as exe:
+                futs = {exe.submit(_worker, s): s for s in to_run}
+                for fut in as_completed(futs):
+                    sym, n = fut.result()
+                    results[sym] = n
+
+            for c in thread_conns.values():
+                try:
+                    c.close()  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+
+        total = sum(results.values())
+        if total > 0:
+            print(f"Updated {len(results)} symbols, {total:,} new rows")
+        else:
+            print("All symbols up to date")
     else:
         results = collector.update_all(workers=workers)
         total = sum(results.values())
@@ -163,7 +255,8 @@ def cmd_update(args: argparse.Namespace) -> None:
 
 def cmd_refresh(args: argparse.Namespace) -> None:
     collector = _make_collector(args)
-    collector.refresh_clean_tables()
+    common_end = not getattr(args, "no_common_end", False)
+    collector.refresh_clean_tables(common_end=common_end)
     print("Clean tables refreshed: bars_1h_clean, bars_4h_clean, bars_1d_clean")
     collector.close()
 
@@ -232,9 +325,16 @@ def parse_args() -> argparse.Namespace:
     up.add_argument("--symbol", help="Update single symbol (default: all)")
     up.add_argument("--workers", type=int, default=1,
                     help="Parallel workers for update (default: 1 = sequential)")
+    up.add_argument("--max-stale-days", type=int, default=0,
+                    help="Skip symbols whose last_ts is older than N days "
+                         "(0 = process all). Useful for cron to avoid "
+                         "wasting time scanning empty ranges on delisted "
+                         "products (default: 0).")
 
     # refresh
-    sub.add_parser("refresh", help="Materialize resampled clean tables")
+    ref = sub.add_parser("refresh", help="Materialize resampled clean tables")
+    ref.add_argument("--no-common-end", action="store_true",
+                     help="Skip common-end truncation (allow ragged end dates)")
 
     # status
     sub.add_parser("status", help="Show DB summary")
