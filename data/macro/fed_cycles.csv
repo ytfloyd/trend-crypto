@@ -1,0 +1,29 @@
+start_ts,end_ts,phase,notes
+1986-01-01,1987-08-31,easing,Tail of post-Volcker easing FFR ~8% to 6.5%
+1987-09-01,1988-08-31,early_hike,First 12 months of Greenspan hiking cycle 6.5% to 8%
+1988-09-01,1989-02-28,late_hike,Hike cycle continues to peak ~9.75% Feb 1989
+1989-03-01,1992-09-30,easing,Long easing 9.75% to 3% through 1992 recession
+1992-10-01,1993-12-31,neutral,FFR held at 3%
+1994-02-01,1995-01-31,early_hike,Bond market massacre cycle 3% to 6%
+1995-02-01,1995-06-30,late_hike,Peak ~6% before mid-cycle cuts
+1995-07-01,1998-09-30,neutral,Mid-cycle cuts then range 5-5.5%
+1998-10-01,1998-11-30,easing,LTCM/Russia 75bp emergency cuts
+1998-12-01,1999-05-31,neutral,Steady at 4.75%
+1999-06-01,2000-05-31,early_hike,Late-tech-bubble hike 4.75% to 6.5%
+2000-06-01,2000-12-31,late_hike,Held at 6.5%
+2001-01-03,2003-06-30,easing,Post-bubble + 9/11 easing 6.5% to 1%
+2003-07-01,2004-05-31,neutral,FFR held at 1%
+2004-06-01,2005-05-31,early_hike,Measured pace 1% to 3%
+2005-06-01,2006-06-30,late_hike,Peak at 5.25% Jun 2006
+2006-07-01,2007-08-31,neutral,FFR held at 5.25%
+2007-09-01,2008-12-31,easing,GFC cuts 5.25% to 0%
+2009-01-01,2015-11-30,neutral,ZIRP era
+2015-12-01,2016-11-30,early_hike,First post-GFC hike Dec 2015 then pause
+2016-12-01,2018-12-31,late_hike,Resumed hikes 0.5% to 2.5%
+2019-01-01,2019-06-30,neutral,Pause at 2.5%
+2019-07-01,2020-04-30,easing,Mid-cycle cuts then COVID 2.5% to 0%
+2020-05-01,2022-02-28,neutral,Pandemic ZIRP
+2022-03-01,2023-02-28,early_hike,Post-COVID inflation cycle 0% to 4.5%
+2023-03-01,2023-07-31,late_hike,Final hikes 4.5% to 5.5%
+2023-08-01,2024-08-31,neutral,Held at 5.25-5.5%
+2024-09-01,2099-12-31,easing,Cuts begin Sep 2024 5.5% to ~4.5%

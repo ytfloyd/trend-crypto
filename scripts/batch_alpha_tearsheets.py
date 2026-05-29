@@ -9,9 +9,16 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
+import numpy as np
 import polars as pl
 
-from analysis.tearsheet import generate_tearsheet
+from analysis.tearsheet import (
+    _crowding_series,
+    _drawdown_stats,
+    _hit_rate,
+    _nw_tstat,
+    generate_tearsheet,
+)
 
 
 @dataclass(frozen=True)
@@ -23,6 +30,11 @@ class GatekeeperResult:
     mean_turnover: float
     verdict: str
     reason: str
+    hit_rate: float = 0.0
+    spread_nw_tstat: float = 0.0
+    max_dd: float = 0.0
+    recovery_periods: int | None = None
+    crowding_pct_history: float = float("nan")
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,6 +47,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--max_alphas", type=int, default=None, help="Optional cap for debugging")
     p.add_argument("--top_k", type=int, default=None, help="Optional top-k pre-screen")
     p.add_argument("--emit-returns", action="store_true", help="Emit spread returns parquet")
+    p.add_argument(
+        "--fed-cycles",
+        default="data/macro/fed_cycles.csv",
+        help="Path to fed_cycles.csv for primer-style regime breakdown.",
+    )
     return p.parse_args()
 
 
@@ -177,6 +194,11 @@ def compute_gatekeeper_metrics(
             mean_turnover=0.0,
             verdict="FAIL",
             reason=f"insufficient_symbols_min={min_symbols}",
+            hit_rate=0.0,
+            spread_nw_tstat=0.0,
+            max_dd=0.0,
+            recovery_periods=None,
+            crowding_pct_history=float("nan"),
         )
         return result, avg_ret_by_quantile
 
@@ -276,6 +298,24 @@ def compute_gatekeeper_metrics(
         verdict = "FAIL"
         reason = "turnover"
 
+    spread_arr = np.asarray(quantile_wide["Spread"].to_list(), dtype=float)
+    hit_rate = _hit_rate(spread_arr)
+    nw_t, _ = _nw_tstat(spread_arr)
+    spread_eq = (1.0 + np.nan_to_num(spread_arr, nan=0.0)).cumprod()
+    dd = _drawdown_stats(spread_eq, quantile_wide["ts"].to_list())
+
+    crowd_window = max(60, int(round(5.0 * periods_per_year)))
+    try:
+        crowding = _crowding_series(sub, n_quantiles, crowd_window)
+        if crowding.height > 0:
+            pct_arr = np.asarray(crowding["pct_history"].to_list(), dtype=float)
+            pct_arr = pct_arr[~np.isnan(pct_arr)]
+            crowd_last = float(pct_arr[-1]) if pct_arr.size else float("nan")
+        else:
+            crowd_last = float("nan")
+    except Exception:
+        crowd_last = float("nan")
+
     return (
         GatekeeperResult(
             alpha=alpha,
@@ -285,6 +325,11 @@ def compute_gatekeeper_metrics(
             mean_turnover=float(mean_turnover),
             verdict=verdict,
             reason=reason,
+            hit_rate=float(hit_rate),
+            spread_nw_tstat=float(nw_t),
+            max_dd=float(dd.get("max_dd", 0.0)),
+            recovery_periods=dd.get("recovery_periods"),
+            crowding_pct_history=float(crowd_last),
         ),
         avg_ret_by_quantile,
     )
@@ -302,6 +347,11 @@ def write_gatekeeper_csv(path: Path, rows: list[GatekeeperResult]) -> None:
             "mean_daily_turnover",
             "verdict",
             "reason",
+            "hit_rate",
+            "spread_nw_tstat",
+            "max_dd",
+            "recovery_periods",
+            "crowding_pct_history",
         ])
         for r in rows:
             writer.writerow(
@@ -313,6 +363,11 @@ def write_gatekeeper_csv(path: Path, rows: list[GatekeeperResult]) -> None:
                     f"{r.mean_turnover:.6f}",
                     r.verdict,
                     r.reason,
+                    f"{r.hit_rate:.6f}",
+                    f"{r.spread_nw_tstat:.6f}",
+                    f"{r.max_dd:.6f}",
+                    "" if r.recovery_periods is None else str(r.recovery_periods),
+                    "" if r.crowding_pct_history is None or (isinstance(r.crowding_pct_history, float) and np.isnan(r.crowding_pct_history)) else f"{r.crowding_pct_history:.6f}",
                 ]
             )
 
@@ -380,6 +435,10 @@ def main() -> None:
     write_gatekeeper_csv(out_dir / "gatekeeper_all.csv", results)
     write_gatekeeper_csv(out_dir / "gatekeeper_survivors.csv", [r for r in results if r.verdict == "PASS"])
 
+    fed_cycles_path = (
+        args.fed_cycles if args.fed_cycles and Path(args.fed_cycles).exists() else None
+    )
+
     for alpha in survivors:
         df_alpha = merged.select(["ts", "symbol", pl.col(alpha).alias("signal"), "forward_ret"])
         out_path = out_dir / "survivors" / alpha / alpha
@@ -390,6 +449,7 @@ def main() -> None:
             alpha_name=alpha,
             n_quantiles=5,
             emit_returns=args.emit_returns,
+            fed_cycles_path=fed_cycles_path,
         )
 
     if len(survivors) >= 2:

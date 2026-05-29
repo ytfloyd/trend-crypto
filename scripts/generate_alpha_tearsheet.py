@@ -27,6 +27,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Output path prefix (default: artifacts/.../tearsheets/{alpha})",
     )
+    p.add_argument(
+        "--fed-cycles",
+        default="data/macro/fed_cycles.csv",
+        help="Path to fed_cycles.csv for primer-style regime breakdown (default: data/macro/fed_cycles.csv).",
+    )
     return p.parse_args()
 
 
@@ -173,12 +178,15 @@ def main() -> None:
                 f"using effective_quantiles={n_quantiles}."
             )
 
+    fed_cycles_path = args.fed_cycles if args.fed_cycles and Path(args.fed_cycles).exists() else None
+
     generate_tearsheet(
         df,
         output,
         alpha_name=args.alpha,
         n_quantiles=n_quantiles,
         emit_returns=args.emit_returns,
+        fed_cycles_path=fed_cycles_path,
     )
     print(f"Wrote tearsheet to {output}.pdf/.png/.json")
 
