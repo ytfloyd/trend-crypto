@@ -1,62 +1,25 @@
 """
 Shared backtesting utilities.
 
-Used by all paper-recreation research packages.
+DEPRECATED LOCATION — the implementation now lives in ``core.backtest`` (single
+source of truth). This module re-exports it verbatim so existing
+``from common.backtest import ...`` callers keep working with zero behavior
+change. New code should import from ``core.backtest`` directly.
+
+See docs/RESEARCH_PIPELINE_REORGANIZATION.md (Phase 1: unify the core stack).
 """
 from __future__ import annotations
 
-import numpy as np
-import pandas as pd
+import sys
+from pathlib import Path
 
-from .data import ANN_FACTOR
+_SRC = Path(__file__).resolve().parents[3] / "src"
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
 
-DEFAULT_COST_BPS = 20.0  # 10 fee + 10 slippage
+from core.backtest import (  # noqa: E402,F401
+    DEFAULT_COST_BPS,
+    simple_backtest,
+)
 
-
-def simple_backtest(
-    weights: pd.DataFrame,
-    returns: pd.DataFrame,
-    cost_bps: float = DEFAULT_COST_BPS,
-    execution_lag: int = 1,
-) -> pd.DataFrame:
-    """Run a simple portfolio backtest from weight and return matrices.
-
-    Parameters
-    ----------
-    weights : pd.DataFrame
-        Wide-format: index = ts (datetime), columns = symbols, values = target weights.
-        Weights are signal weights decided at close of day t.
-    returns : pd.DataFrame
-        Wide-format: index = ts, columns = symbols, values = open-to-close returns.
-    cost_bps : float
-        Round-trip transaction cost in basis points.
-    execution_lag : int
-        Number of bars between signal and execution (Model-B: signal at close t,
-        execute at open t+1, earn close t+1 return).
-
-    Returns
-    -------
-    pd.DataFrame with columns: ts, portfolio_ret, portfolio_equity,
-        gross_exposure, turnover, cost_ret
-    """
-    common_ts = weights.index.intersection(returns.index).sort_values()
-    w = weights.reindex(common_ts).fillna(0.0)
-    r = returns.reindex(common_ts).fillna(0.0)
-
-    w_held = w.shift(execution_lag).fillna(0.0)
-
-    gross = w_held.abs().sum(axis=1)
-    turnover = (w_held - w_held.shift(1).fillna(0.0)).abs().sum(axis=1)
-    cost_ret = turnover * (cost_bps / 10_000)
-
-    port_ret = (w_held * r).sum(axis=1) - cost_ret
-    port_equity = (1 + port_ret).cumprod()
-
-    return pd.DataFrame({
-        "ts": common_ts,
-        "portfolio_ret": port_ret.values,
-        "portfolio_equity": port_equity.values,
-        "gross_exposure": gross.values,
-        "turnover": turnover.values,
-        "cost_ret": cost_ret.values,
-    })
+__all__ = ["DEFAULT_COST_BPS", "simple_backtest"]
