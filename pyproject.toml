@@ -43,6 +43,12 @@ options = [
 ta = [
   "TA-Lib>=0.4.28",
 ]
+databento = [
+  "databento>=0.78.0",
+]
+registry = [
+  "openpyxl>=3.1.5",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -143,7 +149,16 @@ disallow_any_generics = false
 module = "statsmodels.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "databento.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "openpyxl.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 addopts = "-q"
-testpaths = ["tests"]
+pythonpath = ["src"]
+testpaths = ["src/convexity_pipeline/tests", "tests"]
 

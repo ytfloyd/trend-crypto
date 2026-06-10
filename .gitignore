@@ -18,6 +18,12 @@ _cache/
 # OS
 .DS_Store
 
+# Runtime logs & tool caches (reproducible, not source)
+logs/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
 # Python build artifacts
 *.egg-info/
 .ipynb_checkpoints/
