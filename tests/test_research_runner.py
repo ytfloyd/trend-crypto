@@ -72,17 +72,14 @@ def test_resolve_signal_fn_missing_attr():
 # ----------------------------------------------------------------------
 def test_resolve_run_on_examples():
     specs = {s.registry_id: s for s in cli.load_registry(None).values()}
-    # continuation-index has a built signal (signals.tasc) -> runnable, convexity route
+    # all backfilled reference alphas now have built signals -> runnable, routed.
     ci = runner.resolve_run(specs["2026-06-continuation-index"])
-    assert ci.route == "convexity"
-    assert ci.pipeline_module == "pipelines.convexity"
-    assert ci.is_runnable
-    # medallion-lite's signal (signals.cross_sectional.*) isn't built yet ->
-    # not runnable, blocker reported (not faked)
+    assert ci.route == "convexity" and ci.is_runnable
     ml = runner.resolve_run(specs["2026-06-medallion-lite"])
-    assert ml.route == "cross_sectional"
-    assert not ml.is_runnable
-    assert any("not importable" in b for b in ml.blockers)
+    assert ml.route == "cross_sectional" and ml.is_runnable
+    ma = runner.resolve_run(specs["2026-06-ma-5-40-trend"])
+    assert ma.route == "convexity" and ma.is_runnable
+    # the blocked/not-importable path is covered by test_resolve_signal_fn_missing_module.
 
 
 # ----------------------------------------------------------------------
@@ -123,9 +120,16 @@ def test_cli_list_and_validate_ok():
     assert cli.main(["validate"]) == 0
 
 
-def test_cli_run_reports_blocker_exit_1():
-    # medallion-lite's signal isn't built yet -> blocker -> exit 1
-    assert cli.main(["run", "2026-06-medallion-lite"]) == 1
+def test_cli_run_reports_blocker_exit_1(tmp_path):
+    # a spec whose signal_fn isn't importable -> blocker -> exit 1
+    rid = "2026-06-blocked-example"
+    (tmp_path / f"{rid}.yaml").write_text(
+        f"registry_id: {rid}\nname: Blocked\npayoff_shape: convex\ntrack: trend\n"
+        "horizon_bars: 10\nsignal_fn: signals.nonexistent.foo\nuniverse: [BTC-USD]\n"
+        "hypothesis: h\nrationale: r\nfalsification: [f]\n",
+        encoding="utf-8",
+    )
+    assert cli.main(["--registry-dir", str(tmp_path), "run", rid]) == 1
 
 
 def test_cli_promote_roundtrip(tmp_path):

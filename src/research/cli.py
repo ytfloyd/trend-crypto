@@ -84,7 +84,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         print(f"execute  : data unavailable — {exc}")
         return 2
     try:
-        result = runner.execute_screen(resolved, bars)
+        result = runner.execute(resolved, bars)
     except ValueError as exc:
         print(f"execute  : {exc}")
         return 1
