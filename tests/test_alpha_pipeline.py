@@ -91,7 +91,8 @@ class TestSpearmanIC:
         scores = _make_signal_alpha(close)
         ic = _cross_sectional_ic(scores, fwd_ret)
         assert isinstance(ic, pd.Series)
-        assert ic.index.dtype == "datetime64[ns]"
+        # resolution-agnostic: pandas may use ns or us depending on version/platform
+        assert pd.api.types.is_datetime64_any_dtype(ic.index)
 
 
 # ── Embargo tests ─────────────────────────────────────────────────────
