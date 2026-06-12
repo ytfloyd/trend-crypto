@@ -39,6 +39,11 @@ PIPELINE_MODULES: dict[str, str] = {
     "convexity": "pipelines.convexity",
 }
 
+# Routes the long-only/directional fast screen can validly model. cross_sectional
+# rank alphas need L/S quantile construction the screen does not perform, so they
+# must go through their pipeline rather than the screen.
+SCREEN_ROUTES: frozenset[str] = frozenset({"convexity", "time_series"})
+
 # linear pipeline progression for promotion
 _STAGE_ORDER: tuple[Stage, ...] = (
     Stage.S0, Stage.S1, Stage.S2, Stage.S3, Stage.S4, Stage.S5, Stage.S6, Stage.LIVE
@@ -160,14 +165,27 @@ def execute_screen(
     """Fast vectorized screen: signal_fn -> simple_backtest -> equity metrics.
 
     This is the S1-style quick screen, not the full routed pipeline (which adds
-    the per-pipeline stage gates). Requires a resolved signal_fn and complete
-    pre-registration. Returns {"metrics", "equity", "backtest"}.
+    the per-pipeline stage gates). Requires a resolved signal_fn, complete
+    pre-registration, and a route the long-only screen can model. Returns
+    {"metrics", "equity", "backtest"}.
     """
     if resolved.signal_fn is None:
         raise ValueError(f"{resolved.spec.registry_id}: not runnable — {resolved.signal_reason}")
     resolved.spec.require_preregistration()
+    if resolved.route not in SCREEN_ROUTES:
+        raise ValueError(
+            f"{resolved.spec.registry_id}: the fast screen does not support the "
+            f"{resolved.route!r} route — it books weights long-only/directionally and "
+            "cannot construct cross-sectional long/short quantiles. Run it through its "
+            "pipeline instead."
+        )
 
+    # Tolerate duplicate (ts, symbol) rows (e.g. overlapping lake reloads) before pivoting.
+    bars = bars.drop_duplicates(subset=["ts", "symbol"], keep="last")
     weights = resolved.signal_fn(bars, **resolved.spec.signal_params)
+    # Drop the signal warm-up (leading all-NaN rows) so flat warm-up bars don't
+    # dilute the equity-curve metrics.
+    weights = weights.dropna(how="all")
     close = bars.pivot(index="ts", columns="symbol", values="close").sort_index()
     returns = close.pct_change().fillna(0.0)
     bt = simple_backtest(

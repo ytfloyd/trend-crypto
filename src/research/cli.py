@@ -79,9 +79,15 @@ def _cmd_run(args: argparse.Namespace) -> int:
     try:
         bars = runner.load_bars_for(spec)
     except Exception as exc:  # noqa: BLE001 — surface any data/universe issue
+        # Exit 2 (not 1): data/infra unavailable is distinct from a blocked alpha,
+        # so automation can tell "DB not mounted" from "alpha not runnable".
         print(f"execute  : data unavailable — {exc}")
+        return 2
+    try:
+        result = runner.execute_screen(resolved, bars)
+    except ValueError as exc:
+        print(f"execute  : {exc}")
         return 1
-    result = runner.execute_screen(resolved, bars)
     out = runner.write_results(spec.registry_id, result)
     m = result["metrics"]
     print(f"executed : sharpe={m['sharpe']:.2f}  cagr={m['cagr']:.1%}  max_dd={m['max_dd']:.1%}")

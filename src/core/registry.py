@@ -174,12 +174,20 @@ class AlphaSpec(BaseModel):
         from convexity_pipeline.types import Track as CTrack
 
         universe = [self.universe] if isinstance(self.universe, str) else list(self.universe)
+        try:
+            convexity_track = CTrack(self.track.value)
+        except ValueError as exc:
+            raise ValueError(
+                f"{self.registry_id}: track {self.track.value!r} has no convexity-pipeline "
+                "equivalent (e.g. cross_sectional alphas do not convert to a convexity "
+                "Hypothesis) — route it to its own pipeline instead."
+            ) from exc
         return Hypothesis(
             name=self.name,
             statement=self.hypothesis,
             rationale=self.rationale,
             expected_payoff_shape=CPayoff(self.payoff_shape.value),
-            convexity_track=CTrack(self.track.value) if self.track.value in {t.value for t in CTrack} else CTrack.NA,
+            convexity_track=convexity_track,
             horizon_bars=self.horizon_bars,
             universe=universe,
             bar_frequency=self.bar_frequency,

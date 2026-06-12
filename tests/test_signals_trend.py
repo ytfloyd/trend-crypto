@@ -24,12 +24,15 @@ def test_shape_and_columns():
 
 def test_long_only_equal_weight_values():
     w = ma_crossover(_bars(30), fast=3, slow=10)
-    # 2-symbol universe -> active weight is 1/2; values are only {0.0, 0.5}
-    assert set(np.unique(w.values)) <= {0.0, 0.5}
+    # warm-up (before the slow SMA is defined) is NaN, not booked as flat 0.0
+    assert w.iloc[: 10 - 1].isna().all().all()
+    # post-warm-up, 2-symbol universe -> active weight is 1/2; values are {0.0, 0.5}
+    post = w.values[~np.isnan(w.values)]
+    assert set(np.unique(post)) <= {0.0, 0.5}
     # the steadily-rising symbol is long once both SMAs warm up
     assert w["AAA-USD"].iloc[-1] == pytest.approx(0.5)
     # the flat symbol never triggers (fast SMA never exceeds slow SMA)
-    assert (w["BBB-USD"] == 0.0).all()
+    assert (w["BBB-USD"].dropna() == 0.0).all()
 
 
 def test_fast_must_be_less_than_slow():
