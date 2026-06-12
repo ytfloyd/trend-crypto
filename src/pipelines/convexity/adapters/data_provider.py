@@ -17,6 +17,7 @@ lake is locked, raising a clear error only for the symbol that needs it).
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional
@@ -24,7 +25,13 @@ from typing import Dict, Optional
 import duckdb
 import pandas as pd
 
-DEFAULT_DATA_ROOT = "/Users/russellfloyd/Dropbox/NRT/nrt_dev/data"
+# Shared data lakes live one level above the repo (same dir as core.data's
+# DEFAULT_DB). Override with TREND_DATA_ROOT; the fallback is repo-relative so it
+# works on any checkout (and in CI) rather than a machine-specific path.
+DEFAULT_DATA_ROOT = os.environ.get(
+    "TREND_DATA_ROOT",
+    str(Path(__file__).resolve().parents[4] / ".." / "data"),
+)
 
 # Continuous-futures parquet artifacts (1-minute base bars).
 DEFAULT_FUTURES_PARQUET: Dict[str, str] = {
