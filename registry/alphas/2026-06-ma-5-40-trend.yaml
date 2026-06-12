@@ -1,0 +1,43 @@
+registry_id: 2026-06-ma-5-40-trend
+name: MA 5/40 Long-Only Trend
+researcher: research
+registered: "2026-06-10"
+source: "docs/research/ma_5_40_sol_validation_report.md; Transtrend-style crypto MA"
+
+# Routing: convex trend-with-stops payoff -> convexity pipeline, trend track.
+payoff_shape: convex
+track: trend
+horizon_bars: 40
+
+hypothesis: >
+  A 5/40 fast/slow moving-average crossover, long-only, captures sustained
+  crypto uptrends and sits flat otherwise, producing a convex, positively
+  skewed return profile net of costs.
+rationale: >
+  Momentum/trend persistence in crypto majors: the slow MA defines regime, the
+  fast MA times entry; being flat in downtrends truncates the left tail while
+  staying long in uptrends keeps the right tail. Mechanism is autocorrelation
+  of returns at the multi-week horizon.
+falsification:
+  - "Aggregate skew < 0 at S1"
+  - "Net return < 1.5x cost at S2"
+  - "CCS_OOS / CCS_IS < 0.5 at S3"
+
+signal_fn: signals.trend.ma_crossover
+signal_params:
+  fast: 5
+  slow: 40
+universe:
+  - BTC-USD
+  - ETH-USD
+  - SOL-USD
+bar_frequency: "1d"
+cost_profile: crypto_default
+
+pre_registered_metrics:
+  ccs: {expected: 1.2, confidence: medium}
+  skew: {expected: 0.6, confidence: medium}
+  sharpe: {expected: 1.0, confidence: low}
+
+stage: S2
+status: queued

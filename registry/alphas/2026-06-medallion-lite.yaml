@@ -1,0 +1,38 @@
+registry_id: 2026-06-medallion-lite
+name: Medallion Lite
+researcher: research
+registered: "2026-06-10"
+source: "scripts/research/medallion_lite/; flagship cross-sectional factor model"
+
+# Routing: linear cross-sectional rank alpha -> cross-sectional pipeline.
+payoff_shape: linear
+track: cross_sectional
+horizon_bars: 5
+
+hypothesis: >
+  A blend of short-horizon cross-sectional factors (reversal, volume, volatility)
+  ranks crypto names such that the top-minus-bottom quantile spread earns a
+  positive risk-adjusted return net of costs.
+rationale: >
+  Cross-sectional mispricing in mid-cap crypto: liquidity-driven reversal and
+  volume/volatility signals predict relative performance over a few days. Edge
+  is relative ranking, not directional market exposure (dollar-neutral L/S).
+falsification:
+  - "Cross-sectional IC not significantly > 0 (Stage 1 IC screen)"
+  - "Deflated Sharpe <= 0 after multiple-testing correction"
+  - "Net-of-cost IC <= 0 (turnover gate)"
+
+signal_fn: signals.cross_sectional.medallion_lite
+signal_params:
+  reversal_lookback: 5
+  vol_lookback: 20
+universe: midcap_usd
+bar_frequency: "1d"
+cost_profile: crypto_default
+
+pre_registered_metrics:
+  sharpe: {expected: 1.96, confidence: medium}
+  mean_ic: {expected: 0.04, confidence: low}
+
+stage: S3
+status: queued

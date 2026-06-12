@@ -1,0 +1,48 @@
+registry_id: 2026-06-continuation-index
+name: Continuation Index (Ehlers)
+researcher: convexity-pipeline (cohort-01)
+registered: "2026-06-10"
+source: 'TASC V43:09 Sep 2025 — Ehlers, "Continuation Index"'
+
+# Routing: convex trend payoff -> convexity pipeline, trend track.
+payoff_shape: convex
+track: trend
+horizon_bars: 20
+
+hypothesis: >
+  When the Ehlers Continuation Index state flips to +1, the underlying continues
+  in that direction over the next ~20 bars often enough to produce a positively
+  skewed, convex payoff after stops.
+rationale: >
+  Trend regimes persist; a smoothed continuation oscillator with hysteresis
+  enters established trends and exits on reversal, capturing the fat right tail
+  of trending crypto while stopping out small on chop. Mechanism is regime
+  persistence, not "the indicator works".
+falsification:
+  - "Aggregate skew < 0 at S1"
+  - "CCS_OOS / CCS_IS < 0.5 at S3"
+  - "Tail capture < 0.30 at S1"
+
+signal_fn: signals.tasc.continuation_index
+signal_params:
+  gamma: 0.8
+  length: 20
+universe:
+  - BTC-USD
+  - ETH-USD
+  - LTC-USD
+  - BCH-USD
+  - LINK-USD
+  - ADA-USD
+  - SOL-USD
+  - AVAX-USD
+bar_frequency: "1d"
+cost_profile: crypto_default
+
+pre_registered_metrics:
+  ccs: {expected: 1.0, confidence: medium}
+  skew: {expected: 0.5, confidence: medium}
+  tail_capture: {expected: 0.35, confidence: low}
+
+stage: S1
+status: queued
