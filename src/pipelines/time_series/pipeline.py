@@ -18,13 +18,12 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
 
 import pandas as pd
 
-from src.alpha_pipeline.types import StageResult, StageVerdict
-from src.ts_pipeline.types import TSCandidate, TSGateConfig, TSPipelineReport
-from src.ts_pipeline.stages import (
+from ..cross_sectional.types import StageResult, StageVerdict
+from .types import TSCandidate, TSGateConfig, TSPipelineReport
+from .stages import (
     stage_ts_ic,
     stage_persistence,
     stage_horizon_profile,

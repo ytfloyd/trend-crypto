@@ -15,7 +15,7 @@ from typing import Any
 
 import pandas as pd
 
-from src.alpha_pipeline.stages import (
+from .stages import (
     stage_deflated_sharpe,
     stage_ic_decay,
     stage_ic_screen,
@@ -23,7 +23,7 @@ from src.alpha_pipeline.stages import (
     stage_turnover,
     stage_walk_forward,
 )
-from src.alpha_pipeline.types import (
+from .types import (
     AlphaCandidate,
     GateConfig,
     PipelineReport,

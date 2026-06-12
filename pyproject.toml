@@ -160,5 +160,5 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 addopts = "-q"
 pythonpath = ["src"]
-testpaths = ["src/convexity_pipeline/tests", "tests"]
+testpaths = ["src/pipelines/convexity/tests", "tests"]
 

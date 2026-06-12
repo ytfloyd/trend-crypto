@@ -24,10 +24,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.alpha_pipeline.types import StageResult, StageVerdict
-from src.alpha_pipeline.stages import _apply_embargo
-from src.ts_pipeline.types import TSGateConfig
-from src.ts_pipeline.portfolio import vol_targeted_backtest
+from ..cross_sectional.types import StageResult, StageVerdict
+from ..cross_sectional.stages import _apply_embargo
+from .types import TSGateConfig
+from .portfolio import vol_targeted_backtest
 
 logger = logging.getLogger(__name__)
 

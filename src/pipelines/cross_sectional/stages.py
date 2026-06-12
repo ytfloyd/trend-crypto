@@ -16,7 +16,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.alpha_pipeline.types import GateConfig, StageResult, StageVerdict
+from .types import GateConfig, StageResult, StageVerdict
 
 logger = logging.getLogger(__name__)
 
