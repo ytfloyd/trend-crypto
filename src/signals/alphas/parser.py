@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import polars as pl
 
-from alphas.primitives import PRIMITIVES, DOMAIN_CS, DOMAIN_TS
+from .primitives import PRIMITIVES, DOMAIN_CS, DOMAIN_TS
 
 
 _ALPHA_NAME_RE = re.compile(r"^alpha_\d{3}$")

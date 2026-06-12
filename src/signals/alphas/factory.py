@@ -8,7 +8,7 @@ from typing import Iterable
 import duckdb
 import polars as pl
 
-from alphas.compiler import ExecutionPlan
+from .compiler import ExecutionPlan
 
 
 @dataclass(frozen=True)
