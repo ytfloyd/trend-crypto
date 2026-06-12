@@ -11,7 +11,7 @@ from typing import Any, Callable
 
 import pandas as pd
 
-from ..cross_sectional.types import StageResult, StageVerdict  # reuse
+from ..common.types import StageResult, StageVerdict  # reuse
 
 
 # ── Signal callable signature ─────────────────────────────────────────
