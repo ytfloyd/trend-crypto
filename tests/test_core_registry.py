@@ -15,6 +15,7 @@ from core.registry import (
     PayoffShape,
     Stage,
     Track,
+    Validation,
     load_alpha_spec,
     load_registry,
 )
@@ -135,3 +136,20 @@ def test_to_hypothesis_roundtrips_core_fields():
     assert h.horizon_bars == spec.horizon_bars
     assert h.universe == list(spec.universe)
     assert h.falsification_criteria == list(spec.falsification)
+
+
+# ----------------------------------------------------------------------
+# Validation block (realized OOS results + provenance)
+# ----------------------------------------------------------------------
+def test_validation_is_optional():
+    spec = AlphaSpec.model_validate(_minimal())  # no validation block
+    assert spec.validation is None
+
+
+def test_medallion_validation_block_loads():
+    ml = load_registry()["2026-06-medallion-lite"]
+    assert isinstance(ml.validation, Validation)
+    assert ml.validation.oos_sortino == 2.03
+    assert ml.validation.benchmark_oos_sortino == 1.78
+    assert ml.validation.costs_bps == 30.0
+    assert ml.validation.method and ml.validation.caveats and ml.validation.provenance

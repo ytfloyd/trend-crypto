@@ -86,6 +86,28 @@ class PreRegMetric(BaseModel):
     confidence: Optional[str] = None  # e.g. "low" | "medium" | "high"
 
 
+class Validation(BaseModel):
+    """Realized, out-of-sample backtest results + provenance (filled AFTER testing).
+
+    Distinct from pre_registered_metrics (the EXPECTED values set before backtest):
+    this records what was actually measured, how, and the caveats — the honest
+    scorecard. Per the mandate, every promoted result carries its provenance.
+    """
+    model_config = ConfigDict(extra="forbid")
+    method: str                                   # e.g. "param-frozen walk-forward, point-in-time universe"
+    data_range: str                               # e.g. "2021-01..2026-06; OOS 2023-2026"
+    universe: str = ""
+    costs_bps: Optional[float] = None
+    oos_sortino: Optional[float] = None
+    oos_sharpe: Optional[float] = None
+    oos_cagr: Optional[float] = None
+    oos_max_dd: Optional[float] = None
+    benchmark: Optional[str] = None
+    benchmark_oos_sortino: Optional[float] = None
+    caveats: list[str] = Field(default_factory=list)
+    provenance: list[str] = Field(default_factory=list)  # scripts, rule ids, git commit
+
+
 class AlphaSpec(BaseModel):
     """Validated schema for one registry entry (registry/alphas/<id>.yaml)."""
     model_config = ConfigDict(extra="forbid")
@@ -116,6 +138,9 @@ class AlphaSpec(BaseModel):
 
     # --- pre-registered expectations ---
     pre_registered_metrics: dict[str, PreRegMetric] = Field(default_factory=dict)
+
+    # --- realized validation (filled after honest OOS testing) ---
+    validation: Optional[Validation] = None
 
     # --- lifecycle ---
     stage: Stage = Stage.S0
