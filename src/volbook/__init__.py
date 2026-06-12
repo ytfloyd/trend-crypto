@@ -1,46 +1,32 @@
-"""Volatility book trading tools.
+"""DEPRECATED import location.
 
-This package houses the trading-desk tooling that sits alongside the vol
-research code. The first tool connects to Interactive Brokers, pulls
-historical OHLCV for a user-selected futures contract, and regenerates
-an interactive Cursor canvas so the desk can eyeball the tape.
+``volbook`` moved to ``domains.volbook``. This shim re-exports it (and aliases
+its submodules) so existing ``volbook`` / ``src.volbook`` imports keep working
+with zero behavior change. New code should import from ``domains.volbook``.
+See docs/RESEARCH_PIPELINE_REORGANIZATION.md.
 
-Entry points
-------------
-``python -m scripts.volbook.fetch_futures_ohlcv``
-    Default run: pull CL Jun'26 daily bars for the last year, upsert into
-    ``data/volbook/bundle.json``, regenerate the canvas.
-
-Python API
-----------
-``from volbook.bundle import OhlcvBundle, OhlcvSeries``
-``from volbook.ibkr_client import IBHistoricalClient``
-``from volbook.canvas_writer import write_canvas``
+Submodule aliasing is tolerant: a submodule that needs an optional dependency
+(ib_insync, databento, TA-Lib) and can't import is simply not pre-aliased here,
+matching the pre-move behavior (it would have failed on import then too).
 """
 from __future__ import annotations
 
-from .bundle import Bar, OhlcvBundle, OhlcvSeries
-from .continuous import (
-    NymexObservedHolidayCalendar,
-    RollPolicy,
-    WeekendHolidayCalendar,
-    calendar_from_name,
-    cl_last_trade_date,
-    construct_continuous_series,
-)
-from .contracts import CORE_MACRO_ALIASES, FuturesSpec, resolve_futures_spec
+import importlib as _importlib
+import sys as _sys
 
-__all__ = [
-    "Bar",
-    "OhlcvBundle",
-    "OhlcvSeries",
-    "RollPolicy",
-    "WeekendHolidayCalendar",
-    "NymexObservedHolidayCalendar",
-    "calendar_from_name",
-    "cl_last_trade_date",
-    "construct_continuous_series",
-    "CORE_MACRO_ALIASES",
-    "FuturesSpec",
-    "resolve_futures_spec",
-]
+_TARGET = "domains.volbook"
+_SUBMODULES = (
+    "bundle", "continuous", "contracts", "datalake", "signals", "indicators",
+    "ibkr_client", "databento_loader", "canvas_writer", "html_writer", "cli",
+)
+
+_pkg = _importlib.import_module(_TARGET)
+for _name in _SUBMODULES:
+    try:
+        _sys.modules[f"{__name__}.{_name}"] = _importlib.import_module(f"{_TARGET}.{_name}")
+    except Exception:  # noqa: BLE001 — optional-dep submodule; import on demand later
+        pass
+
+_names = getattr(_pkg, "__all__", None) or [n for n in dir(_pkg) if not n.startswith("_")]
+globals().update({n: getattr(_pkg, n) for n in _names})
+__all__ = list(_names)
