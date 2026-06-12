@@ -72,12 +72,17 @@ def test_resolve_signal_fn_missing_attr():
 # ----------------------------------------------------------------------
 def test_resolve_run_on_examples():
     specs = {s.registry_id: s for s in cli.load_registry(None).values()}
-    r = runner.resolve_run(specs["2026-06-continuation-index"])
-    assert r.route == "convexity"
-    assert r.pipeline_module == "pipelines.convexity"
-    # signals.* package not built yet -> not runnable, blocker reported (not faked)
-    assert not r.is_runnable
-    assert any("not importable" in b for b in r.blockers)
+    # continuation-index has a built signal (signals.tasc) -> runnable, convexity route
+    ci = runner.resolve_run(specs["2026-06-continuation-index"])
+    assert ci.route == "convexity"
+    assert ci.pipeline_module == "pipelines.convexity"
+    assert ci.is_runnable
+    # medallion-lite's signal (signals.cross_sectional.*) isn't built yet ->
+    # not runnable, blocker reported (not faked)
+    ml = runner.resolve_run(specs["2026-06-medallion-lite"])
+    assert ml.route == "cross_sectional"
+    assert not ml.is_runnable
+    assert any("not importable" in b for b in ml.blockers)
 
 
 # ----------------------------------------------------------------------
@@ -119,8 +124,8 @@ def test_cli_list_and_validate_ok():
 
 
 def test_cli_run_reports_blocker_exit_1():
-    # real entry; signals.* not built -> blocker -> exit 1
-    assert cli.main(["run", "2026-06-continuation-index"]) == 1
+    # medallion-lite's signal isn't built yet -> blocker -> exit 1
+    assert cli.main(["run", "2026-06-medallion-lite"]) == 1
 
 
 def test_cli_promote_roundtrip(tmp_path):
