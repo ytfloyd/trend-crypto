@@ -222,12 +222,7 @@ class CoinbaseCollector:
         """
         client = self._get_client()
         self._rate_limiter.wait()
-        # Public products endpoint needs no auth; fall back to the authed one.
-        products_fn = getattr(client, "get_public_products", None)
-        if products_fn is not None:
-            response = products_fn(product_type="SPOT")
-        else:
-            response = client.get_products(product_type="SPOT", get_all_products=True)
+        response = client.get_products(product_type="SPOT", get_all_products=True)
 
         symbols: list[str] = []
         quote_counts: dict[str, int] = {}
@@ -753,13 +748,8 @@ class CoinbaseCollector:
             "volume": pl.Float64,
         }
 
-        # Prefer the unauthenticated public candles endpoint: OHLCV market data
-        # does not require API credentials, so this keeps ingestion working even
-        # when CDP keys are absent/expired. Fall back to the authed endpoint.
-        candle_fn = getattr(client, "get_public_candles", None) or client.get_candles
-
         try:
-            response = candle_fn(
+            response = client.get_candles(
                 product_id=symbol,
                 start=start_unix,
                 end=end_unix,
@@ -771,7 +761,7 @@ class CoinbaseCollector:
                 logger.warning("%s: rate limited, backing off 5s", symbol)
                 time.sleep(5)
                 self._rate_limiter.wait()
-                response = candle_fn(
+                response = client.get_candles(
                     product_id=symbol,
                     start=start_unix,
                     end=end_unix,

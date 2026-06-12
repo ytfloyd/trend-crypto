@@ -2,11 +2,9 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from strategy.forecast import (
     FORECAST_CAP,
-    TARGET_ABS_FORECAST,
     _ewma,
     _rolling_max,
     _rolling_min,

@@ -1,7 +1,7 @@
 """Walk-forward probabilistic volatility-expansion baselines."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from importlib.util import find_spec
 from typing import Any
 
