@@ -22,8 +22,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+import pandas as pd
 import yaml
 
+from core.backtest import DEFAULT_COST_BPS, simple_backtest
+from core.metrics import compute_metrics
 from core.registry import AlphaSpec, PayoffShape, Stage, Track, load_alpha_spec
 
 # repo-root/registry/results/<registry_id>/
@@ -133,6 +136,58 @@ def write_run_plan(resolved: ResolvedRun) -> Path:
     return path
 
 
+def load_bars_for(spec: AlphaSpec) -> pd.DataFrame:
+    """Load market bars for a spec's universe at its bar frequency.
+
+    Lazy-imports core.data (duckdb) so the runner stays importable without a DB.
+    Raises a clear error for named universes (no universe registry yet) or a
+    missing data lake.
+    """
+    from core.data import load_bars  # lazy: pulls in duckdb
+
+    bars = load_bars(spec.bar_frequency)
+    if isinstance(spec.universe, list):
+        return bars[bars["symbol"].isin(spec.universe)].copy()
+    raise ValueError(
+        f"named universe {spec.universe!r} not resolvable yet (no universe registry); "
+        "use an explicit symbol list in the registry entry"
+    )
+
+
+def execute_screen(
+    resolved: ResolvedRun, bars: pd.DataFrame, cost_bps: Optional[float] = None
+) -> dict[str, Any]:
+    """Fast vectorized screen: signal_fn -> simple_backtest -> equity metrics.
+
+    This is the S1-style quick screen, not the full routed pipeline (which adds
+    the per-pipeline stage gates). Requires a resolved signal_fn and complete
+    pre-registration. Returns {"metrics", "equity", "backtest"}.
+    """
+    if resolved.signal_fn is None:
+        raise ValueError(f"{resolved.spec.registry_id}: not runnable — {resolved.signal_reason}")
+    resolved.spec.require_preregistration()
+
+    weights = resolved.signal_fn(bars, **resolved.spec.signal_params)
+    close = bars.pivot(index="ts", columns="symbol", values="close").sort_index()
+    returns = close.pct_change().fillna(0.0)
+    bt = simple_backtest(
+        weights, returns, cost_bps=DEFAULT_COST_BPS if cost_bps is None else cost_bps
+    )
+    equity = bt.set_index("ts")["portfolio_equity"]
+    return {"metrics": compute_metrics(equity), "equity": equity, "backtest": bt}
+
+
+def write_results(registry_id: str, result: dict[str, Any]) -> Path:
+    """Persist screen outputs to registry/results/<id>/{metrics.json,equity.csv}."""
+    out_dir = results_dir_for(registry_id)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "metrics.json").write_text(
+        json.dumps(result["metrics"], indent=2, default=float) + "\n", encoding="utf-8"
+    )
+    result["backtest"].to_csv(out_dir / "equity.csv", index=False)
+    return out_dir
+
+
 def next_stage(stage: Stage) -> Optional[Stage]:
     """The stage that follows ``stage`` in the linear pipeline, or None at the end."""
     if stage not in _STAGE_ORDER:
@@ -177,6 +232,9 @@ __all__ = [
     "resolve_run",
     "results_dir_for",
     "write_run_plan",
+    "load_bars_for",
+    "execute_screen",
+    "write_results",
     "next_stage",
     "promote",
     "write_spec",

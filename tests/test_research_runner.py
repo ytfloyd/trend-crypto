@@ -4,6 +4,8 @@ See src/research/runner.py, src/research/cli.py, registry/README.md.
 """
 from __future__ import annotations
 
+import numpy as np
+import pandas as pd
 import pytest
 
 from core.registry import AlphaSpec, Stage, load_alpha_spec
@@ -128,3 +130,64 @@ def test_cli_promote_roundtrip(tmp_path):
     rc = cli.main(["--registry-dir", str(tmp_path), "promote", spec.registry_id])
     assert rc == 0
     assert load_alpha_spec(path).stage == Stage.S2
+
+
+# ----------------------------------------------------------------------
+# End-to-end execution (registry -> signal -> backtest -> metrics)
+# ----------------------------------------------------------------------
+def _synthetic_bars(n: int = 40) -> pd.DataFrame:
+    ts = pd.date_range("2022-01-01", periods=n, freq="D")
+    up = pd.DataFrame({"symbol": "AAA-USD", "ts": ts, "close": np.linspace(100, 220, n)})
+    osc = pd.DataFrame(
+        {"symbol": "BBB-USD", "ts": ts, "close": 100 + 10 * np.sin(np.arange(n) / 3.0)}
+    )
+    return pd.concat([up, osc], ignore_index=True)
+
+
+def test_ma_5_40_entry_now_resolves_runnable():
+    # signals.trend.ma_crossover now exists -> the real registry entry resolves.
+    spec = load_alpha_spec(cli.DEFAULT_REGISTRY_DIR / "2026-06-ma-5-40-trend.yaml")
+    resolved = runner.resolve_run(spec)
+    assert resolved.is_runnable
+    assert resolved.signal_reason == "ok"
+
+
+def test_execute_screen_end_to_end():
+    spec = _spec(
+        payoff_shape="convex", track="trend",
+        signal_fn="signals.trend.ma_crossover",
+        signal_params={"fast": 3, "slow": 10},
+        universe=["AAA-USD", "BBB-USD"],
+    )
+    resolved = runner.resolve_run(spec)
+    assert resolved.is_runnable  # signal_fn imports
+
+    result = runner.execute_screen(resolved, _synthetic_bars(40))
+    metrics = result["metrics"]
+    for key in ("sharpe", "cagr", "max_dd", "total_return"):
+        assert key in metrics
+    assert len(result["equity"]) == 40
+    assert list(result["backtest"].columns) == [
+        "ts", "portfolio_ret", "portfolio_equity", "gross_exposure", "turnover", "cost_ret",
+    ]
+
+
+def test_execute_screen_writes_results(tmp_path, monkeypatch):
+    monkeypatch.setattr(runner, "RESULTS_DIR", tmp_path)
+    spec = _spec(
+        signal_fn="signals.trend.ma_crossover",
+        signal_params={"fast": 3, "slow": 10},
+        universe=["AAA-USD", "BBB-USD"],
+    )
+    resolved = runner.resolve_run(spec)
+    result = runner.execute_screen(resolved, _synthetic_bars(40))
+    out = runner.write_results(spec.registry_id, result)
+    assert (out / "metrics.json").exists()
+    assert (out / "equity.csv").exists()
+
+
+def test_execute_screen_refuses_unrunnable():
+    spec = _spec(signal_fn="signals.missing.nope")
+    resolved = runner.resolve_run(spec)
+    with pytest.raises(ValueError, match="not runnable"):
+        runner.execute_screen(resolved, _synthetic_bars(10))
