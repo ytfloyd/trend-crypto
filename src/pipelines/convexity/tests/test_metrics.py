@@ -5,9 +5,8 @@ zero variance), convexity beta sign correctness.
 """
 import numpy as np
 import pandas as pd
-import pytest
 
-from convexity_pipeline import metrics as M
+from pipelines.convexity import metrics as M
 
 
 # ---------------------------------------------------------------------------

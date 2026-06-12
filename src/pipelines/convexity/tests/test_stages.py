@@ -5,9 +5,8 @@ behavior at each stage matches the spec.
 """
 import numpy as np
 import pandas as pd
-import pytest
 
-from convexity_pipeline import (
+from pipelines.convexity import (
     BacktestResult,
     Candidate,
     Hypothesis,

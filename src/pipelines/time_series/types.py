@@ -7,13 +7,11 @@ than cross-sectional ranking.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any, Callable
 
-import numpy as np
 import pandas as pd
 
-from src.alpha_pipeline.types import StageResult, StageVerdict  # reuse
+from ..cross_sectional.types import StageResult, StageVerdict  # reuse
 
 
 # ── Signal callable signature ─────────────────────────────────────────

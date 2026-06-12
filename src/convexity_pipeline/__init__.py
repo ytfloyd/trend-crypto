@@ -1,61 +1,26 @@
-"""Convexity Alpha Pipeline.
+"""DEPRECATED import location.
 
-Implements the research process defined in
-docs/research/convexity_alpha_pipeline_spec.md.
-
-Parallel pipeline to src/alpha_pipeline/ (which handles cross-sectional /
-linear quant-equity alpha). Routes candidates based on the Alpha Registry's
-`expected_payoff_shape` field.
-
-Public surface:
-    from convexity_pipeline import (
-        Track, PayoffShape, Stage,
-        Hypothesis, Candidate, BacktestResult, StageResult,
-        PipelineConfig, default_config,
-        metrics,
-        Stage0Evaluator, Stage1Evaluator, Stage2Evaluator,
-        Stage3Evaluator, Stage4Evaluator,
-        ConvexityPipelineRunner,
-    )
+``convexity_pipeline`` moved to ``pipelines.convexity``. This shim re-exports it
+(and aliases its submodules, including the ``adapters`` subpackage) so existing
+``convexity_pipeline`` / ``src.convexity_pipeline`` imports keep working with
+zero behavior change. New code should import from ``pipelines.convexity``.
+See docs/RESEARCH_PIPELINE_REORGANIZATION.md.
 """
-from .types import (
-    Track,
-    PayoffShape,
-    Stage,
-    Hypothesis,
-    Candidate,
-    BacktestResult,
-    StageResult,
-    KillDecision,
-    PipelineConfig,
-    default_config,
-)
-from . import metrics
-from .stages import (
-    Stage0Evaluator,
-    Stage1Evaluator,
-    Stage2Evaluator,
-    Stage3Evaluator,
-    Stage4Evaluator,
-)
-from .runner import ConvexityPipelineRunner
+from __future__ import annotations
 
-__all__ = [
-    "Track",
-    "PayoffShape",
-    "Stage",
-    "Hypothesis",
-    "Candidate",
-    "BacktestResult",
-    "StageResult",
-    "KillDecision",
-    "PipelineConfig",
-    "default_config",
-    "metrics",
-    "Stage0Evaluator",
-    "Stage1Evaluator",
-    "Stage2Evaluator",
-    "Stage3Evaluator",
-    "Stage4Evaluator",
-    "ConvexityPipelineRunner",
-]
+import importlib as _importlib
+import sys as _sys
+
+_TARGET = "pipelines.convexity"
+_SUBMODULES = (
+    "types", "stages", "runner", "metrics", "thresholds", "demo",
+    "adapters", "adapters.data_provider", "adapters.existing_engine_adapter",
+)
+
+_pkg = _importlib.import_module(_TARGET)
+for _name in _SUBMODULES:
+    _sys.modules[f"{__name__}.{_name}"] = _importlib.import_module(f"{_TARGET}.{_name}")
+
+_names = getattr(_pkg, "__all__", None) or [n for n in dir(_pkg) if not n.startswith("_")]
+globals().update({n: getattr(_pkg, n) for n in _names})
+__all__ = list(_names)
