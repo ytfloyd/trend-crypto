@@ -37,6 +37,10 @@ def ma_crossover(bars: pd.DataFrame, fast: int = 5, slow: int = 40) -> pd.DataFr
     slow_ma = close.rolling(slow, min_periods=slow).mean()
 
     in_trend = (fast_ma > slow_ma).astype(float)  # 1.0 long, 0.0 flat
+    # Keep the warm-up (before the slow SMA is defined) as NaN rather than 0.0, so
+    # downstream backtests drop it instead of booking flat zero-return bars that
+    # would dilute the metrics.
+    in_trend = in_trend.where(slow_ma.notna())
     n_symbols = close.shape[1]
     weights = in_trend / float(n_symbols) if n_symbols else in_trend
     return weights

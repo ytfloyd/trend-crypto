@@ -152,36 +152,58 @@ def test_ma_5_40_entry_now_resolves_runnable():
     assert resolved.signal_reason == "ok"
 
 
-def test_execute_screen_end_to_end():
-    spec = _spec(
+def _trend_spec(**overrides):
+    base = dict(
         payoff_shape="convex", track="trend",
         signal_fn="signals.trend.ma_crossover",
         signal_params={"fast": 3, "slow": 10},
         universe=["AAA-USD", "BBB-USD"],
     )
-    resolved = runner.resolve_run(spec)
+    base.update(overrides)
+    return _spec(**base)
+
+
+def test_execute_screen_end_to_end():
+    resolved = runner.resolve_run(_trend_spec())
     assert resolved.is_runnable  # signal_fn imports
 
     result = runner.execute_screen(resolved, _synthetic_bars(40))
     metrics = result["metrics"]
     for key in ("sharpe", "cagr", "max_dd", "total_return"):
         assert key in metrics
-    assert len(result["equity"]) == 40
+    # warm-up (slow-1 = 9 bars) is dropped, not booked flat -> fewer than 40 bars
+    assert 0 < len(result["equity"]) < 40
     assert list(result["backtest"].columns) == [
         "ts", "portfolio_ret", "portfolio_equity", "gross_exposure", "turnover", "cost_ret",
     ]
 
 
-def test_execute_screen_writes_results(tmp_path, monkeypatch):
-    monkeypatch.setattr(runner, "RESULTS_DIR", tmp_path)
+def test_execute_screen_tolerates_duplicate_bars():
+    bars = pd.concat([_synthetic_bars(40), _synthetic_bars(40).iloc[:5]], ignore_index=True)
+    resolved = runner.resolve_run(_trend_spec())
+    result = runner.execute_screen(resolved, bars)  # must not raise on duplicate (ts,symbol)
+    assert len(result["equity"]) > 0
+
+
+def test_execute_screen_refuses_cross_sectional_route():
     spec = _spec(
+        payoff_shape="linear", track="cross_sectional",
         signal_fn="signals.trend.ma_crossover",
         signal_params={"fast": 3, "slow": 10},
         universe=["AAA-USD", "BBB-USD"],
     )
     resolved = runner.resolve_run(spec)
+    assert resolved.route == "cross_sectional"
+    with pytest.raises(ValueError, match="does not support the 'cross_sectional'"):
+        runner.execute_screen(resolved, _synthetic_bars(40))
+
+
+def test_execute_screen_writes_results(tmp_path, monkeypatch):
+    monkeypatch.setattr(runner, "RESULTS_DIR", tmp_path)
+    resolved = runner.resolve_run(_trend_spec())
     result = runner.execute_screen(resolved, _synthetic_bars(40))
-    out = runner.write_results(spec.registry_id, result)
+    out = runner.write_results(spec_registry_id := resolved.spec.registry_id, result)
+    assert spec_registry_id  # used
     assert (out / "metrics.json").exists()
     assert (out / "equity.csv").exists()
 
@@ -191,3 +213,15 @@ def test_execute_screen_refuses_unrunnable():
     resolved = runner.resolve_run(spec)
     with pytest.raises(ValueError, match="not runnable"):
         runner.execute_screen(resolved, _synthetic_bars(10))
+
+
+def test_to_hypothesis_raises_for_cross_sectional_track():
+    spec = _spec(payoff_shape="linear", track="cross_sectional")
+    with pytest.raises(ValueError, match="no convexity-pipeline equivalent"):
+        spec.to_hypothesis()
+
+
+def test_cli_run_execute_data_unavailable_exits_2():
+    # ma-5-40 is runnable (signal_fn imports), but the market lake is absent in this
+    # env -> data-unavailable is exit 2, distinct from a blocked alpha (exit 1).
+    assert cli.main(["run", "2026-06-ma-5-40-trend", "--execute"]) == 2
