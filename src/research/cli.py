@@ -72,6 +72,20 @@ def _cmd_run(args: argparse.Namespace) -> int:
         print("not runnable yet — see blockers above.")
         return 1
     print("runnable : yes")
+
+    if not args.execute:
+        print("(use --execute to run the fast screen)")
+        return 0
+    try:
+        bars = runner.load_bars_for(spec)
+    except Exception as exc:  # noqa: BLE001 — surface any data/universe issue
+        print(f"execute  : data unavailable — {exc}")
+        return 1
+    result = runner.execute_screen(resolved, bars)
+    out = runner.write_results(spec.registry_id, result)
+    m = result["metrics"]
+    print(f"executed : sharpe={m['sharpe']:.2f}  cagr={m['cagr']:.1%}  max_dd={m['max_dd']:.1%}")
+    print(f"results  : {out}")
     return 0
 
 
@@ -107,6 +121,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     pr = sub.add_parser("run", help="resolve + route + write a run plan")
     pr.add_argument("registry_id")
+    pr.add_argument(
+        "--execute", action="store_true",
+        help="run the fast screen end-to-end (requires signal_fn + market data)",
+    )
     pr.set_defaults(func=_cmd_run)
 
     pp = sub.add_parser("promote", help="advance one stage (pre-registration gated)")
