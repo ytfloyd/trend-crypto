@@ -101,6 +101,10 @@ module = "alphas.*"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
+module = "signals.alphas.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
 module = "analysis.*"
 ignore_errors = true
 

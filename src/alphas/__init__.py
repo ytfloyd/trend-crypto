@@ -1,21 +1,22 @@
-from alphas.adapters import to_alphas_panel, to_pandas_multiindex
-from alphas.compiler import ExecutionPlan, compile_formulas
-from alphas.factory import AlphaMeta, build_alpha_panel, write_outputs
-from alphas.parser import ExprNode, load_alphas_file, parse
-from alphas.primitives import PRIMITIVES, CS_PRIMITIVES, TS_PRIMITIVES
+"""DEPRECATED import location.
 
-__all__ = [
-    "AlphaMeta",
-    "CS_PRIMITIVES",
-    "ExecutionPlan",
-    "ExprNode",
-    "PRIMITIVES",
-    "TS_PRIMITIVES",
-    "build_alpha_panel",
-    "compile_formulas",
-    "load_alphas_file",
-    "parse",
-    "to_alphas_panel",
-    "to_pandas_multiindex",
-    "write_outputs",
-]
+The formulaic-alpha DSL moved to ``signals.alphas``. This shim re-exports it
+(and aliases its submodules) so existing ``alphas`` / ``src.alphas`` imports keep
+working with zero behavior change. New code should import from ``signals.alphas``.
+See docs/RESEARCH_PIPELINE_REORGANIZATION.md.
+"""
+from __future__ import annotations
+
+import importlib as _importlib
+import sys as _sys
+
+_TARGET = "signals.alphas"
+_SUBMODULES = ("parser", "primitives", "compiler", "factory", "adapters", "signal_processor")
+
+_pkg = _importlib.import_module(_TARGET)
+for _name in _SUBMODULES:
+    _sys.modules[f"{__name__}.{_name}"] = _importlib.import_module(f"{_TARGET}.{_name}")
+
+_names = getattr(_pkg, "__all__", None) or [n for n in dir(_pkg) if not n.startswith("_")]
+globals().update({n: getattr(_pkg, n) for n in _names})
+__all__ = list(_names)

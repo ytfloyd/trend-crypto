@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 import polars as pl
 
-from alphas.parser import ExprNode, parse
-from alphas.primitives import DOMAIN_TS, PRIMITIVES
+from .parser import ExprNode, parse
+from .primitives import DOMAIN_TS, PRIMITIVES
 
 
 @dataclass(frozen=True)
