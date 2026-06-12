@@ -3,11 +3,21 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from scripts.reference.build_cme_universe_from_docx import (
     DEFAULT_SOURCE,
     parse_source,
     render_markdown,
     write_outputs,
+)
+
+# DEFAULT_SOURCE points at a non-portable local export (a personal Downloads
+# path); skip the whole module when it isn't present (e.g. in CI) rather than
+# failing. Runs normally on a machine where the source file exists.
+pytestmark = pytest.mark.skipif(
+    not DEFAULT_SOURCE.exists(),
+    reason="CME source export not available in this environment",
 )
 
 
