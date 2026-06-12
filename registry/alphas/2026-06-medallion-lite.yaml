@@ -10,13 +10,14 @@ track: cross_sectional
 horizon_bars: 5
 
 hypothesis: >
-  A blend of short-horizon cross-sectional factors (reversal, volume, volatility)
-  ranks crypto names such that the top-minus-bottom quantile spread earns a
-  positive risk-adjusted return net of costs.
+  A cross-sectional composite of five factors (momentum, volume surge, realized
+  vol, proximity-to-high, risk-adjusted momentum) ranks crypto names such that
+  the inverse-vol top-minus-bottom quantile spread earns a positive risk-adjusted
+  return net of costs.
 rationale: >
-  Cross-sectional mispricing in mid-cap crypto: liquidity-driven reversal and
-  volume/volatility signals predict relative performance over a few days. Edge
-  is relative ranking, not directional market exposure (dollar-neutral L/S).
+  Cross-sectional mispricing in mid-cap crypto: trend, attention/flow, and
+  quality factors predict relative performance over a few days. Edge is relative
+  ranking, not directional market exposure (inverse-vol, ~dollar-neutral L/S).
 falsification:
   - "Cross-sectional IC not significantly > 0 (Stage 1 IC screen)"
   - "Deflated Sharpe <= 0 after multiple-testing correction"
@@ -24,8 +25,7 @@ falsification:
 
 signal_fn: signals.cross_sectional.medallion_lite
 signal_params:
-  reversal_lookback: 5
-  vol_lookback: 20
+  lookback: 7
 universe: midcap_usd
 bar_frequency: "1d"
 cost_profile: crypto_default

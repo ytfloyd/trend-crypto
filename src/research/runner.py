@@ -195,6 +195,63 @@ def execute_screen(
     return {"metrics": compute_metrics(equity), "equity": equity, "backtest": bt}
 
 
+def execute_cross_sectional(
+    resolved: ResolvedRun, bars: pd.DataFrame, *, horizon: int = 1, vol_lookback: int = 20
+) -> dict[str, Any]:
+    """Cross-sectional screen: rank scores -> inverse-vol L/S quantile equity.
+
+    The signal_fn returns wide cross-sectional rank scores; this builds the
+    inverse-vol-weighted, beta-neutral long/short book the cross_sectional
+    pipeline uses (reusing its canonical per-bar helper) and reports equity
+    metrics. Needs >= 10 symbols per bar (the L/S helper's minimum breadth).
+    Returns {"metrics", "equity", "backtest"}.
+    """
+    if resolved.signal_fn is None:
+        raise ValueError(f"{resolved.spec.registry_id}: not runnable — {resolved.signal_reason}")
+    resolved.spec.require_preregistration()
+    # Lazy import: pulls in the cross_sectional pipeline only when actually running one.
+    from pipelines.cross_sectional.stages import (
+        _forward_returns,
+        _invvol_ls_return,
+        _trailing_vol,
+    )
+
+    bars = bars.drop_duplicates(subset=["ts", "symbol"], keep="last")
+    scores = resolved.signal_fn(bars, **resolved.spec.signal_params)
+    close = bars.pivot(index="ts", columns="symbol", values="close").sort_index()
+    fwd_ret = _forward_returns(close, horizon=horizon)
+    vol_wide = _trailing_vol(close.pct_change(), lookback=vol_lookback)
+
+    dated: list[tuple[Any, float]] = []
+    for ts in scores.index:
+        if ts not in fwd_ret.index:
+            continue
+        vol_row = vol_wide.loc[ts] if ts in vol_wide.index else None
+        val = _invvol_ls_return(scores.loc[ts], fwd_ret.loc[ts], vol_row)
+        if val is not None:
+            dated.append((ts, float(val)))
+    if not dated:
+        raise ValueError(
+            f"{resolved.spec.registry_id}: cross-sectional screen produced no long/short "
+            "returns — need >= 10 symbols with valid scores per bar."
+        )
+
+    idx = pd.DatetimeIndex([d for d, _ in dated])
+    ls = pd.Series([v for _, v in dated], index=idx, dtype=float)
+    equity = (1.0 + ls).cumprod()
+    bt = pd.DataFrame({
+        "ts": idx, "portfolio_ret": ls.to_numpy(), "portfolio_equity": equity.to_numpy(),
+    })
+    return {"metrics": compute_metrics(equity), "equity": equity, "backtest": bt}
+
+
+def execute(resolved: ResolvedRun, bars: pd.DataFrame) -> dict[str, Any]:
+    """Execute an alpha by route: cross_sectional -> L/S screen, else long-only screen."""
+    if resolved.route == "cross_sectional":
+        return execute_cross_sectional(resolved, bars)
+    return execute_screen(resolved, bars)
+
+
 def write_results(registry_id: str, result: dict[str, Any]) -> Path:
     """Persist screen outputs to registry/results/<id>/{metrics.json,equity.csv}."""
     out_dir = results_dir_for(registry_id)
@@ -252,6 +309,8 @@ __all__ = [
     "write_run_plan",
     "load_bars_for",
     "execute_screen",
+    "execute_cross_sectional",
+    "execute",
     "write_results",
     "next_stage",
     "promote",
