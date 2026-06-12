@@ -24,8 +24,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from ..cross_sectional.types import StageResult, StageVerdict
-from ..cross_sectional.stages import _apply_embargo
+from ..common.types import StageResult, StageVerdict
+from ..common.embargo import _apply_embargo
 from .types import TSGateConfig
 from .portfolio import vol_targeted_backtest
 

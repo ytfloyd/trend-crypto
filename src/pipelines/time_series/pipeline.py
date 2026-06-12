@@ -21,7 +21,7 @@ import time
 
 import pandas as pd
 
-from ..cross_sectional.types import StageResult, StageVerdict
+from ..common.types import StageResult, StageVerdict
 from .types import TSCandidate, TSGateConfig, TSPipelineReport
 from .stages import (
     stage_ts_ic,

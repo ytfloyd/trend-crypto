@@ -2,16 +2,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any, Callable
 
 import pandas as pd
 
-
-class StageVerdict(str, Enum):
-    PASS = "PASS"
-    FAIL = "FAIL"
-    SKIP = "SKIP"
+# Shared stage-result contracts now live in pipelines.common; re-exported here so
+# `cross_sectional.types.StageResult/StageVerdict` keeps working.
+from ..common.types import StageResult, StageVerdict
 
 
 @dataclass(frozen=True)
@@ -48,16 +45,6 @@ class GateConfig:
     # Stage 5 — deflated Sharpe
     min_deflated_sharpe_pval: float = 0.95
     n_trials_for_deflation: int | None = None  # auto-set from candidate count
-
-
-@dataclass
-class StageResult:
-    """Outcome of a single pipeline stage for one alpha."""
-
-    stage: str
-    verdict: StageVerdict
-    metrics: dict[str, Any] = field(default_factory=dict)
-    detail: str = ""
 
 
 # Callable that takes (close_wide, volume_wide, returns_wide) panel DataFrames
