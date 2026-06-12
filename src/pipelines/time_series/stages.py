@@ -336,7 +336,7 @@ def stage_walk_forward(
 
     Gate: PBO < max_pbo.
     """
-    from src.afml.backtest_stats import probability_of_backtest_overfitting
+    from afml.backtest_stats import probability_of_backtest_overfitting
 
     common_dates = sorted(forecasts.index.intersection(returns.index))
     n_dates = len(common_dates)
@@ -457,7 +457,7 @@ def stage_deflated_sharpe(
 
     Gate: DSR p-value >= min_deflated_sharpe_pval.
     """
-    from src.afml.backtest_stats import (
+    from afml.backtest_stats import (
         deflated_sharpe_ratio,
         expected_max_sharpe,
     )

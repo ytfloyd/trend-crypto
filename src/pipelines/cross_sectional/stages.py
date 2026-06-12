@@ -536,7 +536,7 @@ def stage_walk_forward(
     Computes IS and OOS Sharpe per split, then PBO.
     Gate: PBO < max_pbo.
     """
-    from src.afml.backtest_stats import probability_of_backtest_overfitting
+    from afml.backtest_stats import probability_of_backtest_overfitting
 
     fwd_ret = _forward_returns(close_wide, horizon=1)
     common_dates = sorted(scores.index.intersection(fwd_ret.index))
@@ -655,7 +655,7 @@ def stage_deflated_sharpe(
     V2: Uses inverse-vol weighted long/short proxy when returns_wide is provided.
     Gate: P(true SR > E[max SR under null]) >= min_deflated_sharpe_pval.
     """
-    from src.afml.backtest_stats import (
+    from afml.backtest_stats import (
         deflated_sharpe_ratio,
         expected_max_sharpe,
     )

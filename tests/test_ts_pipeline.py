@@ -10,11 +10,10 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from src.alpha_pipeline.types import StageVerdict
-from src.ts_pipeline.types import TSCandidate, TSGateConfig, TSPipelineReport
-from src.ts_pipeline.portfolio import vol_targeted_backtest, FORECAST_SCALE
+from src.ts_pipeline.types import TSCandidate, TSGateConfig
+from src.ts_pipeline.portfolio import vol_targeted_backtest
 from src.ts_pipeline.stages import (
     _per_asset_ic,
     _pooled_tstat,
