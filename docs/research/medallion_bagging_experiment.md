@@ -51,8 +51,36 @@ max 3.20**. Every seed beats both baselines; the effect is not a lucky single dr
   construction before quoting an absolute uplift over 2.95.
 - Still equal-weight, convention-oriented ranks (no return-fitted signs), single walk-forward grid.
 
-**Verdict.** The first method that beats the 100-factor composite. Promising enough to validate
-properly (DSR/PBO + reconciled baseline), not yet to ship.
+**Preliminary verdict (later overturned — see below).** Looked like the first method to beat the
+100-factor composite; flagged for DSR/PBO validation before shipping.
 
-**Provenance:** `scripts/research/k2_atlas/run_medallion_bagging.py`, TA-Lib 0.6.8, 30 bps,
-2021-01..2026-06, OOS 2023+, top-100 point-in-time universe, seeds {42,7,99,2024,31}.
+## Validation (Deflated Sharpe + PBO) — overturns the preliminary win
+
+Ran the ensemble DESIGN space (agg ∈ {mean,vote} × subset m ∈ {10,20,40,60} × members K ∈ {50,100}
+= 18 trials, **frozen** flagship params to isolate the design choice from the inner param search)
+through the repo's multiple-testing controls (`src/afml/backtest_stats.py` DSR + matrix-form CSCV
+PBO). Harness: `scripts/research/k2_atlas/run_medallion_validation.py`.
+
+| Check | Result | Reading |
+|---|---|---|
+| Trial family OOS Sortino | all 18 within **2.66–2.91** (5-factor 2.77, 100-factor 2.79, best vote 2.91) | designs are statistically indistinguishable |
+| Deflated Sharpe (winner) | DSR p ≈ **1.00** | the **base strategy's** Sharpe is genuine — but trial-SR std is 0.002, so the haircut is ~0 and DSR credits the ensemble with nothing |
+| **PBO via CSCV** (S=12 / S=16) | **0.77 / 0.70** | **FAILS** the ≤0.5 gate — the IS-best design lands below the OOS median ~70% of the time; IS/OOS rank-corr ≈ 0 |
+
+**The earlier 3.05 was a mirage.** Under frozen params, vote(m=20,K=50) is **2.82**, not 3.05 — the
+gap came from the *inner walk-forward param selection* (a second selection layer), not the vote
+aggregation. With that layer removed, every design — 5-factor, 100-factor, every bag — clusters at
+~2.7–2.9.
+
+**Final verdict — do NOT adopt the factor zoo or any ensemble of it.**
+- **DSR** confirms the *underlying cross-sectional factor signal* on the top-100 universe has genuine,
+  non-fluke skill (this is the real, bankable edge).
+- **PBO** shows the *factor-count / ensemble-design* choices are **not selectable** — picking the
+  backtest-best design does not generalize (overfitting). Mean-bagging was already known to add
+  nothing; vote-bagging's apparent edge does not survive once the param-selection layer is removed.
+- **Implication:** stick with the simple 5-factor composite on the top-100 universe. The dependable
+  levers remain universe breadth (top-50→top-100, ~+1.0 Sortino) and risk overlays — **not** factor
+  count or ensembling. This is a textbook PBO catch (QF-21).
+
+**Provenance:** `run_medallion_bagging.py`, `run_medallion_validation.py`, `src/afml/backtest_stats.py`,
+TA-Lib 0.6.8, 30 bps, 2021-01..2026-06, OOS 2023+, top-100 point-in-time universe, seeds {42,7,99,2024,31}.
