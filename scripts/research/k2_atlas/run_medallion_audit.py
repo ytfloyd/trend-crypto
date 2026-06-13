@@ -91,7 +91,7 @@ def main() -> None:
     cols, idx = factors["momentum"].columns, factors["momentum"].index
     elig_h = uni.eligibility(dd, memb, "top", 100, cols, idx)
     comp5 = uni.composite_within(factors, elig_h)              # within-universe 5-factor composite
-    btc = wf._daily(rw["BTC-USD"]).reindex(idx).fillna(0.0)
+    btc = wf._daily(rw["BTC-USD"])  # daily series — do NOT reindex onto the hourly index
 
     # headline (frozen) + cost sweep + per-fold
     frozen = daily_at_cost(comp5, rw, regime, FLAGSHIP, 30.0)
