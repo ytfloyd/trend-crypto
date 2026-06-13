@@ -149,7 +149,7 @@ def test_validation_is_optional():
 def test_medallion_validation_block_loads():
     ml = load_registry()["2026-06-medallion-lite"]
     assert isinstance(ml.validation, Validation)
-    assert ml.validation.oos_sortino == 2.03
+    assert ml.validation.oos_sortino == 2.95  # top-100 universe (widened from top-50's 2.03)
     assert ml.validation.benchmark_oos_sortino == 1.78
     assert ml.validation.costs_bps == 30.0
     assert ml.validation.method and ml.validation.caveats and ml.validation.provenance
