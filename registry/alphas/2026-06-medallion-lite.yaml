@@ -54,8 +54,14 @@ validation:
   benchmark: "BTC buy&hold"
   benchmark_oos_sortino: 1.78
   caveats:
-    - "HEADLINE is frozen-param (2.84); walk-forward (param-selected) UPPER BOUND is 2.95. The
-       earlier reported 2.95 carried a parameter-selection optimism removed here."
+    - "COST-FRAGILE / NOT PRODUCTION-READY as specified (top-100). The 2.84 assumes a UNIFORM 30bps;
+       under realistic LIQUIDITY-TIERED costs OOS Sortino falls to 1.42 (below BTC 1.78), and a
+       square-root market-impact model gives soft capacity < $5M AUM (Sortino 0.99 at $5M). The edge
+       is concentrated in small, expensive names. See docs/research/medallion_validation_protocol.md
+       (Amendment A) + artifacts/medallion_audit/medallion_cost_sensitivity.json. Next step: find a
+       cost-robust liquid universe (top-25 / ADV>=$50M) before any sizing."
+    - "HEADLINE is frozen-param (2.84) at FLAT 30bps; walk-forward UPPER BOUND is 2.95. The earlier
+       reported 2.95 carried a parameter-selection optimism removed here."
     - "Per-fold OOS Sortino decays 4.72 (2023) -> 2.72 (2024) -> 1.67 (2025-26): all positive,
        but the recent edge is softening."
     - "Cost-robust: OOS Sortino 3.50/3.27/3.05/2.84/2.42 at 0/10/20/30/50 bps. 30bps flat may

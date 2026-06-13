@@ -61,6 +61,25 @@ walk-forward is a labeled upper bound.** All pre-registered gates (G1–G4) pass
    `medallion_validation_protocol.md`, `medallion_factor_count_experiment.md`,
    `medallion_bagging_experiment.md`.
 
+## Cost sensitivity (GATING — currently ❌ FAILS)
+The 2.84 headline assumes a **uniform 30 bps**. Under **liquidity-tiered costs** (by point-in-time
+ADV; pre-registered Amendment A, harness reconciled to the engine) the edge does **not** survive:
+
+| Cost assumption (OOS 2023–26) | Sortino |
+|---|---|
+| Flat 30 bps (headline) | 2.84 |
+| Benign tiered (10/20/40/70) | 2.26 |
+| **Realistic tiered (20/40/70/120)** | **1.42** (below BTC 1.78) |
+| Punitive tiered (35/70/130/220) | −0.13 |
+| + market impact, $5M AUM | 0.99 |
+| + market impact, $25M AUM | 0.67 |
+
+The alpha is concentrated in small, expensive names; **soft capacity is < $5M AUM**. As specified
+(top-100) the strategy is **cost-fragile and not production-ready**. Gating next step: re-run the
+universe sweep under realistic tiered costs to find a cost-robust liquid universe (top-25 /
+ADV ≥ $50M). See `medallion_validation_protocol.md` (Amendment A),
+`artifacts/medallion_audit/medallion_cost_sensitivity.json`.
+
 ## Risks & caveats
 - **Cost realism at the margin (new, from widening):** 30 bps flat is reasonable for the top
   names, but rank 50–100 / sub-$1M assets can slip more. Drawdown *improves* with widening and
