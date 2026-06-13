@@ -78,3 +78,19 @@ OOS Sortino > 2.0).
 
 **Gates:** GC0 S0 ≈ 2.84 (reconciliation) · GC1 OOS Sortino > 2.0 under S2 · GC2 > 1.5 under S3 ·
 GC3 capacity AUM (informational). **Harness:** `scripts/research/k2_atlas/run_medallion_costs.py`.
+
+---
+
+## Amendment B (2026-06-13) — cost-robust universe search (pre-registered)
+
+The top-100 universe fails the cost gate (Amendment A) because its alpha sits in the illiquid tail.
+This searches for a LIQUID-leaning universe that survives realistic costs, trading capacity for
+cost-robustness. For each universe — top_10/25/50/100 and ADV floors ≥$50M / ≥$20M, all
+point-in-time, survivorship-free, within-universe rank, frozen flagship params — report OOS Sortino
+under **S0 flat-30 (reference)** and **S2 realistic-tiered** costs, plus the capacity curve
+(S2 spreads + √-impact, c=100bps) over AUM ∈ {5,25,50,100,250} $M.
+
+**Gate GC-B:** a universe is **cost-robust** if its S2-tiered OOS Sortino **> 2.0**; **deployable**
+if additionally its **soft capacity** (largest AUM with S2+impact Sortino > 2.0) **≥ $5M**. If no
+universe is cost-robust, the concept does not graduate. **Harness:**
+`scripts/research/k2_atlas/run_medallion_cost_universe.py`.
