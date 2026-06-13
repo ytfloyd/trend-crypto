@@ -74,11 +74,18 @@ ADV; pre-registered Amendment A, harness reconciled to the engine) the edge does
 | + market impact, $5M AUM | 0.99 |
 | + market impact, $25M AUM | 0.67 |
 
-The alpha is concentrated in small, expensive names; **soft capacity is < $5M AUM**. As specified
-(top-100) the strategy is **cost-fragile and not production-ready**. Gating next step: re-run the
-universe sweep under realistic tiered costs to find a cost-robust liquid universe (top-25 /
-ADV ≥ $50M). See `medallion_validation_protocol.md` (Amendment A),
-`artifacts/medallion_audit/medallion_cost_sensitivity.json`.
+The alpha is concentrated in small, expensive names; **soft capacity is < $5M AUM**.
+
+**Cost-robust universe search (Amendment B) — no universe graduates.** Re-running across liquid
+universes under realistic tiered costs, every configuration lands below the 2.0 gate *and* below
+BTC (1.78): top_25 → S2 1.29, top_50 → 1.45, top_100 → 1.42, **adv≥$50M → 1.72 (best)**, with
+capacity that never clears 2.0 at any AUM. Breadth buys flat-cost alpha in expensive names;
+liquidity buys cost-robustness but too few names — neither end clears the bar.
+
+> **STATUS: KILLED (2026-06-13).** A statistically genuine cross-sectional signal (DSR p≈1.0) that
+> is **not economically harvestable after realistic transaction costs**. The flat-30 bps Sortino
+> (2.0–2.84) was a cost-optimistic artifact; it does not survive liquidity-tiered costs or market
+> impact in any universe. Not deployed. See `medallion_cost_universe.json`, `RESEARCH_LOG.md`.
 
 ## Risks & caveats
 - **Cost realism at the margin (new, from widening):** 30 bps flat is reasonable for the top

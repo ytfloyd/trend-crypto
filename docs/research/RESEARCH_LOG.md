@@ -12,6 +12,23 @@ Standing references:
 
 ---
 
+## 2026-06-13 · Cost-robust universe search — ❌ DOES NOT GRADUATE → strategy KILLED
+**Question.** Does any liquid-leaning universe survive realistic tiered costs where top-100 failed?
+**Method.** Pre-registered Amendment B: top_10/25/50/100 + ADV floors ≥$50M/$20M, frozen 5-factor,
+S0 flat-30 (reference) vs S2 realistic-tiered + S2-impact capacity curve. GC-B: cost-robust if
+S2 OOS Sortino > 2.0; deployable if soft capacity ≥ $5M.
+**Result — NONE cost-robust.** S2-tiered OOS Sortino: top_10 1.32 · top_25 1.29 · top_50 1.45 ·
+top_100 1.42 · **adv≥$50M 1.72 (best)** · adv≥$20M 1.33 — every one below the 2.0 gate and below
+BTC (1.78). Capacity never clears 2.0 at any AUM. Fundamental tension: breadth → flat-cost alpha in
+*expensive* names; liquidity → cost-robust but too *few* names.
+**Decision. KILLED.** The cross-sectional signal is statistically genuine (DSR p≈1.0) but **not
+economically harvestable after realistic costs in any universe**. The flat-30 Sortino (2.0–2.84) was
+a cost-optimistic artifact. Registry status → killed; no deployment. Honest negative result.
+**Detail:** `medallion_validation_protocol.md` (Amendment B) · **Harness:** `run_medallion_cost_universe.py` ·
+**Manifest:** `artifacts/medallion_audit/medallion_cost_universe.json`
+
+---
+
 ## 2026-06-13 · Tiered-cost sensitivity — ❌ FAILS (edge is in the illiquid tail)
 **Question.** Does the 2.84 flat-30 headline survive realistic, liquidity-dependent costs?
 **Method.** Per-name costs tiered by point-in-time ADV (pre-registered Amendment A). GC0 reconciled:

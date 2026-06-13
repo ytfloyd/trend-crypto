@@ -78,5 +78,9 @@ validation:
     - "scripts/research/k2_atlas/run_medallion_validation.py (DSR/PBO; rejected factor zoo + ensembling)"
     - "K2 TRADE ATLAS rules applied: QF-01, QF-07, QF-10, CV-17, QF-21, MR-09"
 
-stage: S3
-status: queued
+# KILLED 2026-06-13: real cross-sectional signal (DSR p~1.0) but NOT economically viable
+# after realistic transaction costs. No universe (top-10..100, ADV>=$20M/$50M) clears OOS
+# Sortino 2.0 under liquidity-tiered costs; best case adv>=$50M = 1.72 (< BTC 1.78), capacity
+# never clears 2.0 at any AUM. See medallion_cost_universe.json + RESEARCH_LOG.md.
+stage: Killed
+status: killed
