@@ -56,3 +56,25 @@ On completion, revise the strategy card, registry `validation` block, and invest
 walk-forward-selected 2.95, which carried a parameter-selection optimism this protocol removes.
 
 **Pre-registered by:** research · **Harness:** `scripts/research/k2_atlas/run_medallion_audit.py`
+
+---
+
+## Amendment A (2026-06-13) — tiered-cost sensitivity (pre-registered)
+
+Tests whether the headline survives realistic, liquidity-dependent costs (the 30 bps flat
+assumption may understate slippage on smaller names). Costs are applied per name, per bar, as
+one-way turnover × the name's cost, replicating the engine's accounting exactly. **GC0:** the
+flat-30 control must reproduce the 2.84 headline, or the harness is wrong and the run is void.
+
+**Liquidity tier** by point-in-time 20-day dollar-ADV: T1 ≥ $50M · T2 $20–50M · T3 $5–20M · T4 < $5M.
+
+**Part A — tiered flat-cost scenarios** (one-way bps, T1/T2/T3/T4):
+S0 control 30/30/30/30 · S1 benign 10/20/40/70 · S2 base 20/40/70/120 · S3 punitive 35/70/130/220.
+
+**Part B — participation/impact capacity curve:** per-name cost = spread_tier + c·√(participation)
+bps, participation = AUM·(one-way traded fraction)/ADV, c = 100 bps (square-root law). Sweep
+AUM ∈ {5, 25, 50, 100, 250} $M; report OOS Sortino vs AUM and the soft capacity (largest AUM with
+OOS Sortino > 2.0).
+
+**Gates:** GC0 S0 ≈ 2.84 (reconciliation) · GC1 OOS Sortino > 2.0 under S2 · GC2 > 1.5 under S3 ·
+GC3 capacity AUM (informational). **Harness:** `scripts/research/k2_atlas/run_medallion_costs.py`.
