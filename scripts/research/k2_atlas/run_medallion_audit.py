@@ -49,11 +49,24 @@ def _git(*args) -> str:
         return "unknown"
 
 
+CODE_PATHS = [
+    "scripts/research/k2_atlas/run_medallion_audit.py",
+    "scripts/research/k2_atlas/run_medallion_universe.py",
+    "scripts/research/k2_atlas/run_medallion_walkforward.py",
+    "src/afml/backtest_stats.py", "src/core/metrics.py", "scripts/research/medallion_lite/",
+]
+
+
 def provenance() -> dict:
+    dirty_files = [ln for ln in _git("status", "--porcelain").splitlines() if ln.strip()]
+    code_dirty = [ln for ln in _git("status", "--porcelain", "--", *CODE_PATHS).splitlines() if ln.strip()]
     return {
         "git_commit": _git("rev-parse", "HEAD"),
-        "git_dirty": bool(_git("status", "--porcelain")),
         "git_branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
+        # tree-level dirtiness is reported for completeness, but what matters for audit is
+        # whether the RESEARCH CODE matches the committed hash:
+        "audit_code_clean": not code_dirty,
+        "tree_dirty_files": dirty_files,   # expected: only unrelated pre-existing WIP files
         "python": platform.python_version(), "numpy": np.__version__,
         "pandas": pd.__version__, "duckdb": duckdb.__version__, "scipy": scipy.__version__,
         "platform": platform.platform(),
