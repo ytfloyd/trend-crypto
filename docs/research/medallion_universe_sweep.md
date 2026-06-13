@@ -29,6 +29,7 @@ brings it back in line.)
 | top_50 | 49 | 2.60 | 2.03 | 148% | −38% | 2.90 |
 | **top_100** | 93 | **2.84** | 2.15 | 173% | −37% | **3.04** |
 | top_200 | 161 | 2.47 | 1.88 | 142% | −43% | 2.60 |
+| top_250 | 177 | 2.46 | 1.87 | 139% | −41% | 2.58 |
 | **adv ≥ $1M** | 72 | 2.76 | 2.11 | 155% | −32% | 3.00 |
 | adv ≥ $250k | 124 | 2.48 | 1.93 | 137% | −43% | 2.66 |
 | all_usd | 193 | 2.48 | 1.89 | 142% | −41% | 2.62 |
@@ -44,6 +45,7 @@ clean USD table loaded here (also explains the tiny 1.97-vs-2.03 reconciliation 
 | membership (validated baseline) | 1.97 | 1.57 | 98% | −38% | 2.07 |
 | top_50 | 2.29 | 1.81 | 124% | −41% | 2.33 |
 | **top_100** | **2.95** | 2.19 | 181% | −35% | 2.90 |
+| top_250 | 2.28 | 1.79 | 130% | −47% | 2.21 |
 | adv ≥ $1M | 2.46 | 1.90 | 134% | −37% | 2.49 |
 
 ## Findings
@@ -57,7 +59,9 @@ clean USD table loaded here (also explains the tiny 1.97-vs-2.03 reconciliation 
    **adv ≥ $1M** (≈72 names) is the liquidity-floor equivalent: WF 2.46, +vol-target 3.00, and
    the tightest drawdown (−32% frozen). Pushing to `top_200`/`adv ≥ $250k`/`all_usd`
    (120–190 names) settles back to ~2.47–2.48 with −41% to −45% drawdowns — the deep micro-cap
-   tail adds noise and cost drag without adding edge.
+   tail adds noise and cost drag without adding edge. **top_250 was tested explicitly and confirms
+   this**: honest WF-OOS Sortino **2.28** (vs top_100's 2.95) with a worse drawdown (−47%) — clearly
+   inferior to the ~70–100 optimum, though still ahead of BTC.
 3. **Adopted rule:** **top_100 by point-in-time trailing ADV** (≈93 names). It nearly doubles
    breadth vs the baseline, raises honest WF-OOS Sortino 1.97 → 2.95, and improves the drawdown.
    `adv ≥ $1M` is documented as the economically-principled liquidity-floor alternative with
