@@ -12,6 +12,25 @@ Standing references:
 
 ---
 
+## 2026-06-13 · Bagged ensemble of the 100-factor zoo
+**Question.** Can a bagged ensemble of the 100 TA-Lib factors beat the single composite?
+**Method.** Random-subspace bagging (K members, each a random subset of m factors, each member
+re-ranked to uniform selectivity — the guardrail); aggregate by **mean** vs **vote** (top-tercile
+consensus); same top-100 / within-universe / walk-forward / 30 bps. Seed-stability check on the
+winner.
+**Result.** **Mean (linear) bagging adds nothing** — converges to the equal-weight 100-factor
+composite (~2.88). **Vote (non-linear consensus) bagging is a genuine, stable lift:** Sortino
+**3.04 ± 0.13** across 5 seeds (vs 100-factor 2.88, 5-factor 2.52), with a *better* drawdown
+(−37% vs −41%) and the best vol-target (3.45). Mechanism is sensible: consensus downweights names
+propped up by a single extreme indicator.
+**Decision.** **Most promising result so far, but NOT promoted.** Needs deflated-Sharpe / PBO over
+the ensemble design space and reconciliation to the validated 2.95 baseline construction before
+adoption. Kept in research, not in the card/registry.
+**Detail:** [`medallion_bagging_experiment.md`](medallion_bagging_experiment.md) ·
+**Harness:** `run_medallion_bagging.py`
+
+---
+
 ## 2026-06-12 · Universe stress-test — top-250
 **Question.** Does pushing breadth further, to top-250, help beyond the adopted top-100?
 **Method.** Added `top_250` to the canonical universe sweep (same point-in-time / within-universe /
