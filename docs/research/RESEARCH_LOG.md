@@ -12,7 +12,25 @@ Standing references:
 
 ---
 
-## 2026-06-13 · Bagged ensemble of the 100-factor zoo
+## 2026-06-13 · Multiple-testing validation (DSR + PBO) — bagging overturned
+**Question.** Does the vote-bagging lift survive selection-bias correction?
+**Method.** Ensemble DESIGN space (mean/vote × m × K = 18 trials, **frozen** params to isolate the
+design choice) through `src/afml/backtest_stats` Deflated Sharpe + matrix-form CSCV PBO.
+**Result.** **No.** Under frozen params all 18 designs cluster at OOS Sortino **2.66–2.91**
+(5-factor 2.77, 100-factor 2.79) — statistically indistinguishable. **DSR p≈1.00** confirms the
+*base* factor signal's Sharpe is genuine, but the trial dispersion is ~0 so it credits the ensemble
+with nothing. **PBO 0.70–0.77 FAILS** the ≤0.5 gate (IS-best design lands below OOS median ~70%;
+rank-corr ≈ 0). The earlier 3.05 was an artifact of the *inner walk-forward param selection*, not
+the vote aggregation (frozen vote = 2.82).
+**Decision.** **Do NOT adopt the factor zoo or any ensemble of it.** Keep the simple 5-factor
+composite on top-100. Dependable levers remain universe breadth + risk overlays, not factor
+count/ensembling. Textbook PBO catch (QF-21).
+**Detail:** [`medallion_bagging_experiment.md`](medallion_bagging_experiment.md) (validation section) ·
+**Harness:** `run_medallion_validation.py`
+
+---
+
+## 2026-06-13 · Bagged ensemble of the 100-factor zoo  ⚠️ superseded by validation above
 **Question.** Can a bagged ensemble of the 100 TA-Lib factors beat the single composite?
 **Method.** Random-subspace bagging (K members, each a random subset of m factors, each member
 re-ranked to uniform selectivity — the guardrail); aggregate by **mean** vs **vote** (top-tercile
