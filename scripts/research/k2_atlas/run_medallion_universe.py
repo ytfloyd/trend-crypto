@@ -57,6 +57,7 @@ SPECS = [
     ("top_50", "top", 50),
     ("top_100", "top", 100),
     ("top_200", "top", 200),
+    ("top_250", "top", 250),
     ("adv>=$1M", "floor", 1e6),
     ("adv>=$250k", "floor", 250e3),
     ("all_usd", "all", 0),
@@ -219,7 +220,8 @@ def main() -> None:
     # ---- honest walk-forward (param-frozen) for the reconciliation baseline + candidates ----
     print("\n=== PARAM-FROZEN WALK-FORWARD (honest OOS, fold-selected params, within-universe rank) ===")
     for label, kind, value in [("membership", "membership", 0), ("top_50", "top", 50),
-                               ("top_100", "top", 100), ("adv>=$1M", "floor", 1e6)]:
+                               ("top_100", "top", 100), ("top_250", "top", 250),
+                               ("adv>=$1M", "floor", 1e6)]:
         elig_h = eligibility(dd, memb, kind, value, cols, idx)
         oos = walk_forward_oos(factors, rw, regime, elig_h)
         m, mvt = _metrics(oos), _metrics(wf.vol_target(oos))
