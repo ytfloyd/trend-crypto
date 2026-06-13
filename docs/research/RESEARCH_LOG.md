@@ -12,6 +12,27 @@ Standing references:
 
 ---
 
+## 2026-06-13 · Tiered-cost sensitivity — ❌ FAILS (edge is in the illiquid tail)
+**Question.** Does the 2.84 flat-30 headline survive realistic, liquidity-dependent costs?
+**Method.** Per-name costs tiered by point-in-time ADV (pre-registered Amendment A). GC0 reconciled:
+the per-name backtester reproduces the engine's flat-30 result (2.84) exactly.
+**Result — gate FAILS.** S0 flat-30 **2.84** → S1 benign-tiered **2.26** → S2 realistic-tiered
+**1.42** (below BTC 1.78) → S3 punitive **−0.13**. Capacity curve (S2 spreads + √-impact): even
+**$5M AUM → 0.99**, $25M → 0.67, $100M → 0.36; **soft capacity < $5M**. GC1 (S2>2.0) and GC2
+(S3>1.5) both fail.
+**Interpretation.** The alpha is concentrated in small, expensive names (tiers T3/T4): tiers that
+are *cheaper* for liquid names but dearer for small ones still crater the Sortino, and market
+impact kills it at any material AUM. The 2.84 headline is contingent on an optimistic UNIFORM-cost
+assumption.
+**Decision.** **NOT production-ready as specified (top-100): cost-fragile, low-capacity.** Next:
+re-run the universe sweep UNDER realistic tiered costs to find a cost-robust, liquid universe
+(top-25 / ADV≥$50M) — the concept may only survive on liquid names at low AUM. Materials updated to
+carry this prominently; 2.84 is labeled as the flat-30 (cost-optimistic) figure, not a deployable number.
+**Detail:** `medallion_validation_protocol.md` (Amendment A) · **Harness:** `run_medallion_costs.py` ·
+**Manifest:** `artifacts/medallion_audit/medallion_cost_sensitivity.json`
+
+---
+
 ## 2026-06-13 · Pre-registered auditable validation → frozen headline 2.84
 **Question.** Establish one defensible, auditable performance figure (frozen-as-headline, WF as
 upper bound) and correct the param-selection optimism in the prior 2.95.
