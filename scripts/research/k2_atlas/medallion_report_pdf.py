@@ -117,17 +117,19 @@ def build():
                   "exit with a trailing stop), and scales gross exposure with an ensemble measure of the "
                   "market regime.", s_body),
               Paragraph(
-                  "On a survivorship-free, walk-forward, net-of-cost basis (30 bps one-way), the strategy "
-                  "delivers a <b>Sortino ratio of ~2.0 on a 50-name universe and ~3.0 on a 100-name "
-                  "universe</b>, versus <b>1.78 for buy-and-hold Bitcoin</b>, with materially smaller "
-                  "drawdowns. The central finding is that <b>the strategy's edge scales with universe "
-                  "breadth</b> — a structural advantage for an intentionally capacity-constrained manager "
-                  "able to trade smaller digital assets — up to an optimum of roughly 70–100 names.", s_body)]
+                  "On a survivorship-free, net-of-cost basis (30 bps one-way) over the 100-name universe, "
+                  "the strategy delivers an out-of-sample (2023–2026) <b>Sortino ratio of 2.84 on frozen "
+                  "parameters</b> — the headline figure, with no parameters fit on the data — versus "
+                  "<b>1.78 for buy-and-hold Bitcoin</b>, with a materially smaller drawdown (−37% vs −50%). "
+                  "A walk-forward variant that re-selects parameters reaches 2.95; we report it only as an "
+                  "upper bound. All five figures below are reproduced by a single, deterministic, "
+                  "pre-registered audit script with a published provenance manifest.", s_body)]
     story += [tbl([["Metric (OOS 2023–2026, net of 30 bps)", "Medallion Lite (100-name)", "BTC buy & hold"],
-                   ["Sortino ratio", "2.95", "1.78"],
-                   ["Sharpe ratio", "2.19", "1.15"],
-                   ["Annualised return (CAGR)", "181%", "54%"],
-                   ["Maximum drawdown", "−35%", "−50%"]], [3.3, 2.0, 1.6], hi=1)]
+                   ["Sortino — frozen params (headline)", "2.84", "1.78"],
+                   ["Sortino — walk-forward (upper bound)", "2.95", "—"],
+                   ["Sharpe ratio", "2.15", "1.15"],
+                   ["Annualised return (CAGR)", "173%", "54%"],
+                   ["Maximum drawdown", "−37%", "−50%"]], [3.3, 2.0, 1.6], hi=1)]
 
     story += [Paragraph("1. Strategy overview", s_h1),
               Paragraph(
@@ -148,29 +150,33 @@ def build():
 
     story += [Paragraph("2. Research methodology and integrity", s_h1),
               Paragraph(
-                  "Backtest integrity is the central determinant of whether a result is real. Three "
-                  "disciplines govern every figure: a <b>survivorship-free, point-in-time universe</b> "
-                  "(membership known only as-of each date); <b>walk-forward parameter selection</b> "
-                  "(parameters fit on training windows only, frozen, then scored out-of-sample); and "
-                  "<b>costs always on</b> (30 bps one-way).", s_body),
+                  "Backtest integrity governs every figure here: a <b>survivorship-free, point-in-time "
+                  "universe</b> (membership known only as-of each date); <b>costs always on</b> (30 bps "
+                  "one-way); and a <b>pre-registered, deterministic audit</b> with explicit pass/fail gates "
+                  "and a published provenance manifest. The <b>headline uses frozen parameters</b> — "
+                  "nothing fit on the data; a walk-forward variant that re-selects parameters is reported "
+                  "only as an upper bound, because parameter selection is itself a source of optimism.", s_body),
               Paragraph(
-                  "The value of this discipline is concrete. A naïvely-constructed version appeared to "
-                  "deliver a Sortino of 2.70; rebuilding it survivorship-free and walk-forward reduced the "
-                  "honest figure to ~2.0 — roughly <b>0.7 of apparent &lsquo;edge&rsquo; was look-ahead "
-                  "bias</b>. We report the defensible ~2.0–3.0 range.", s_body),
-              tbl([["Stage of rigor (50-name universe)", "Sortino", "What changed"],
-                   ["Naïve construction", "2.70", "Full-history liquidity (look-ahead)"],
-                   ["Survivorship-free, point-in-time", "1.97", "Universe known only as-of date"],
-                   ["+ Walk-forward selection", "2.03", "Parameters frozen out-of-sample"],
-                   ["+ Volatility-targeting overlay", "2.33", "Dynamic de-risking"]], [2.6, 0.9, 3.4])]
+                  "The value of this discipline is concrete, and we apply it to our own results. A "
+                  "naïvely-constructed version appeared to deliver a Sortino of 2.70; rebuilding it "
+                  "survivorship-free cut that to ~2.0 (≈0.7 was look-ahead bias). Separately, an attempt to "
+                  "enrich the model with 100 technical factors and machine-learning ensembles produced "
+                  "eye-catching numbers that <b>failed an overfitting test</b> (probability of backtest "
+                  "overfitting 0.70–0.77) and were rejected — we run the simple five-factor model.", s_body),
+              tbl([["Stage of rigor (100-name universe)", "OOS Sortino", "What changed"],
+                   ["Naïve construction (50-name)", "2.70", "Full-history liquidity (look-ahead)"],
+                   ["Survivorship-free + walk-forward (50)", "~2.0", "Universe + params honest"],
+                   ["Widen to 100-name, walk-forward", "2.95", "Breadth (upper bound)"],
+                   ["Frozen params (pre-registered HEADLINE)", "2.84", "No parameter fitting"]], [2.7, 1.0, 3.2])]
     story += [PageBreak()]
 
     story += [Paragraph("3. Performance results — the breadth lever", s_h1),
               Paragraph(
                   "Holding the honest methodology fixed, we varied only the <b>breadth of the tradable "
                   "universe</b>. Because the edge is relative ranking across names, a wider opportunity set "
-                  "offers more independent bets. All figures are out-of-sample (2023–2026), "
-                  "survivorship-free, walk-forward, net of 30 bps.", s_body),
+                  "offers more independent bets. Figures below are out-of-sample (2023–2026), "
+                  "survivorship-free, net of 30 bps, on the <b>walk-forward (upper-bound)</b> basis for "
+                  "cross-universe comparability; the adopted 100-name frozen-param headline is 2.84.", s_body),
               tbl([["Universe definition", "~Names", "Sortino", "Max DD", "+ vol-target"],
                    ["50-name (prior baseline)", "50", "1.97", "−38%", "2.07"],
                    ["100-name (adopted)", "93", "2.95", "−35%", "3.04"],
@@ -217,17 +223,19 @@ def build():
         story += [Paragraph("6. Conclusion", s_h1),
                   Paragraph(
                       "Medallion Lite is a disciplined cross-sectional crypto factor strategy whose honest, "
-                      "survivorship-free, walk-forward performance — a Sortino of ~2.0 at 50 names rising to "
-                      "~3.0 at 100 names, against 1.78 for Bitcoin, with smaller drawdowns — rests on a "
-                      "structural edge that <i>improves with universe breadth</i>. That property aligns "
-                      "directly with a capacity-constrained mandate. We have validated the result against "
-                      "deliberate bias controls and identified transaction-cost realism as the principal "
-                      "remaining diligence item before scaling.", s_body)]
+                      "survivorship-free, out-of-sample performance — a frozen-parameter Sortino of <b>2.84 "
+                      "on the 100-name universe</b> (2.95 walk-forward upper bound), against 1.78 for Bitcoin, "
+                      "with a smaller drawdown — rests on a structural edge that <i>improves with universe "
+                      "breadth</i>, aligning directly with a capacity-constrained mandate. Every pre-registered "
+                      "acceptance gate passed, the edge persists in each out-of-sample year (4.7 / 2.7 / 1.7), "
+                      "and it is robust to costs through 50 bps. Transaction-cost realism on the smaller names "
+                      "is the principal remaining diligence item before scaling.", s_body)]
 
         story += [Spacer(1, 8), Paragraph(
-            "Provenance: backtests on Coinbase USD-pair OHLCV (2021-01 to 2026-06; out-of-sample "
-            "2023–2026), 30 bps one-way, survivorship-free point-in-time universe, param-frozen "
-            "walk-forward. Registry ID 2026-06-medallion-lite.", s_small)]
+            "Provenance &amp; reproducibility: pre-registered protocol (medallion_validation_protocol.md); "
+            "deterministic audit (run_medallion_audit.py) with a published JSON manifest + daily-return CSV "
+            "in artifacts/medallion_audit/. Coinbase USD-pair OHLCV 2021-01→2026-06, OOS 2023+, 30 bps, "
+            "survivorship-free point-in-time top-100 universe. Registry ID 2026-06-medallion-lite.", s_small)]
         story += [Spacer(1, 6), Paragraph(
             "<b>Disclaimer.</b> This document is provided for informational purposes only and does not "
             "constitute an offer to sell or a solicitation to buy any security or interest in any fund. "
