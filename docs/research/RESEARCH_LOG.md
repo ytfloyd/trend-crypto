@@ -5,6 +5,7 @@ the detailed writeup and the harness that produced it. All figures are net of 30
 survivorship-free (point-in-time universe), param-frozen walk-forward unless stated. OOS = 2023+.
 
 Standing references:
+- **Capstone summary (read this first):** [`medallion_lite_research_summary.md`](medallion_lite_research_summary.md)
 - Strategy card: [`medallion_lite_strategy_card.md`](medallion_lite_strategy_card.md)
 - Investor report: [`medallion_research_report.md`](medallion_research_report.md)
 - Registry entry: `registry/alphas/2026-06-medallion-lite.yaml`
