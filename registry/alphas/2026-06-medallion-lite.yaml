@@ -35,32 +35,38 @@ pre_registered_metrics:
   mean_ic: {expected: 0.04, confidence: low}
 
 # Realized results from the K2-Atlas Sortino study (honest, OOS, costs in).
+# Universe widened to top-100 after the universe sweep (docs/research/medallion_universe_sweep.md).
 validation:
   method: >
     Param-frozen walk-forward (select params on each fold's train window, freeze,
-    score on test; folds 2021-22->2023, ->2024, ->2025-26), on a POINT-IN-TIME
-    top-50 universe (survivorship-free). Daily Sortino, 30bps one-way costs.
+    score on test; folds 2021-22->2023, ->2024, ->2025-26) on a POINT-IN-TIME
+    top-100-by-20d-trailing-ADV universe (survivorship-free), with WITHIN-universe
+    cross-sectional factor ranking. The committed top-50 membership table reproduces
+    the prior 1.97 baseline under the same method (reconciliation). 30bps one-way, daily Sortino.
   data_range: "2021-01..2026-06; OOS = concatenated test folds 2023-2026"
-  universe: "coinbase bars_1d_usd_universe_clean_top50_adv10m (point-in-time membership)"
+  universe: "coinbase USD pairs, point-in-time top-100 by 20d trailing ADV (adv>=$1M is the floor alternative)"
   costs_bps: 30.0
-  oos_sortino: 2.03
-  oos_sharpe: 1.60
-  oos_cagr: 1.01
-  oos_max_dd: -0.39
+  oos_sortino: 2.95
+  oos_sharpe: 2.19
+  oos_cagr: 1.81
+  oos_max_dd: -0.35
   benchmark: "BTC buy&hold"
   benchmark_oos_sortino: 1.78
   caveats:
     - "signal_fn here is a SIMPLIFIED daily proxy; the validated metrics come from the
        FLAGSHIP hourly event-driven pipeline (scripts/research/medallion_lite/), not this signal_fn."
-    - "A vol-targeting overlay (QF-07) lifts OOS Sortino to 2.33, but partly via leverage
-       (CAGR 101%->146%, max_dd -39%->-42%)."
-    - "Per-fold OOS Sortino DECAYS: 3.49 (2023) -> 1.97 (2024) -> 1.11 (2025-26) -- recent edge weakening."
-    - "As-shipped flagship run was survivorship-inflated (Sortino 2.70); point-in-time corrects to ~1.97-2.03."
-    - "Assumes the membership table's ADV ranking is point-in-time/trailing (not independently re-verified)."
+    - "30bps flat may be optimistic for rank 50-100 / sub-$1M names; a tiered-cost re-test is the
+       gating follow-up before sizing up the widened universe."
+    - "A vol-targeting overlay (QF-07) lifts OOS Sortino to ~3.04 (frozen)/2.90 (WF), partly via leverage."
+    - "Top-100 aggregate (2.95) not yet decomposed per fold; top-50 showed decay 3.49->1.97->1.11."
+    - "Universe is RECONSTRUCTED from 20d trailing ADV (no $10M floor); production should build
+       top-100 from a committed point-in-time membership table (method reconciled at membership=1.97)."
+    - "Prior validated number was 2.03 (top-50); widening to top-100 raises it to 2.95 with better DD (-35%)."
   provenance:
-    - "scripts/research/k2_atlas/run_medallion_walkforward.py (walk-forward + overlays)"
+    - "scripts/research/k2_atlas/run_medallion_universe.py (universe sweep + reconciliation -> top-100)"
+    - "scripts/research/k2_atlas/run_medallion_walkforward.py (walk-forward + overlays, top-50 baseline)"
     - "scripts/research/k2_atlas/run_medallion_pit.py (point-in-time / survivorship test)"
-    - "scripts/research/k2_atlas/run_medallion_sortino.py (flagship as-shipped, biased baseline)"
+    - "docs/research/medallion_universe_sweep.md (universe study writeup)"
     - "K2 TRADE ATLAS rules applied: QF-01, QF-07, QF-10, CV-17, QF-21, MR-09"
 
 stage: S3

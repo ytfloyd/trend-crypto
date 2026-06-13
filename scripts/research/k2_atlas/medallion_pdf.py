@@ -144,9 +144,9 @@ def full_stats(daily, bench=None, lo=None) -> dict:
 
 
 def build():
-    composite_pit, rw, regime = wf.load_pit()
-    daily = wf.config_daily_returns(composite_pit, rw, regime, PARAMS)
-    btc = wf._daily(rw["BTC-USD"]).reindex(daily.index).fillna(0.0)
+    # adopted universe: point-in-time top-100 by trailing ADV, within-universe ranking
+    import run_medallion_universe as uni
+    daily, btc, _, _ = uni.build_spec_daily("top", 100, PARAMS)
     strat_eq = (1 + daily.fillna(0.0)).cumprod()
     btc_eq = (1 + btc).cumprod()
 
@@ -183,7 +183,8 @@ def build():
         ["Registry ID", "2026-06-medallion-lite"],
         ["Class", "Cross-sectional crypto factor (long-biased, regime-gated, event-driven)"],
         ["Route", "cross_sectional"],
-        ["Universe", "Coinbase USD pairs, point-in-time top-50 by ADV (survivorship-free)"],
+        ["Universe", "Coinbase USD pairs, point-in-time top-100 by 20d trailing ADV "
+                     "(survivorship-free; widened from top-50 per the universe sweep)"],
         ["Bar frequency", "Hourly (flagship pipeline); daily for the registry signal_fn proxy"],
         ["Costs", "30 bps one-way"],
         ["Status", "S3 · validated with caveats"]])]
@@ -200,7 +201,7 @@ def build():
             "per name; 15% trailing stop; max hold 14 days; rebalance every 24h."]),
         Paragraph("<b>Mandate note (long convexity):</b> this is a long-biased directional factor "
                   "book, not a pure long-gamma vehicle. Its convexity is indirect — the trailing "
-                  "stop + regime gate truncate the left tail (−37% max DD vs BTC −50%/−77%). Treat "
+                  "stop + regime gate truncate the left tail (−35% max DD vs BTC −50%). Treat "
                   "it as a cross-sectional momentum sleeve, not the trend/options convexity core.", s_body)]
     story += [Paragraph("Rulebook rules applied (K2 TRADE ATLAS)", s_h1), bullets([
         "<b>QF-01</b> cross-sectional momentum · <b>QF-07</b> vol-targeting (overlay)",
@@ -210,44 +211,52 @@ def build():
     story += [PageBreak()]
 
     pf = lambda m: [m["Sortino"], m["Sharpe"], m["CAGR"], m["Max drawdown"]]
+    svt = full_stats(wf.vol_target(daily), btc, "2023-01-01")
     perf = Table([["", "Sortino", "Sharpe", "CAGR", "MaxDD"],
-                  ["Medallion — OOS 2023-26"] + pf(s_oos),
-                  ["Medallion — OOS + vol-target"] + [f"{full_stats(wf.vol_target(daily), btc, '2023-01-01')['Sortino']}",
-                                                       full_stats(wf.vol_target(daily), btc, "2023-01-01")["Sharpe"],
-                                                       full_stats(wf.vol_target(daily), btc, "2023-01-01")["CAGR"],
-                                                       full_stats(wf.vol_target(daily), btc, "2023-01-01")["Max drawdown"]],
+                  ["Medallion — WF-OOS (validated, top-100)", "2.95", "2.19", "181%", "−35%"],
+                  ["Medallion — OOS 2023-26 (frozen params)"] + pf(s_oos),
+                  ["Medallion — OOS + vol-target"] + [svt["Sortino"], svt["Sharpe"], svt["CAGR"], svt["Max drawdown"]],
                   ["Medallion — FULL 2021-26"] + pf(s_full),
+                  ["top-50 baseline (prior validated)", "1.97", "1.57", "98%", "−38%"],
                   ["BTC buy&hold — OOS"] + pf(b_oos),
                   ["BTC buy&hold — FULL"] + pf(b_full)],
-                 colWidths=[2.4 * inch, 1.0 * inch, 1.0 * inch, 1.05 * inch, 1.05 * inch])
+                 colWidths=[2.9 * inch, 0.9 * inch, 0.85 * inch, 0.95 * inch, 0.95 * inch])
     perf.setStyle(TableStyle([("FONTSIZE", (0, 0), (-1, -1), 8.5), ("GRID", (0, 0), (-1, -1), 0.4, HexColor("#cbd5e1")),
                               ("BACKGROUND", (0, 0), (-1, 0), HexColor(NAVY)), ("TEXTCOLOR", (0, 0), (-1, 0), rc.white),
                               ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("ALIGN", (1, 0), (-1, -1), "CENTER"),
                               ("ROWBACKGROUNDS", (0, 1), (-1, -1), [rc.white, HexColor("#f8fafc")])]))
     story += [Paragraph("Validated performance (honest)", s_h1), perf, Spacer(1, 4),
               Paragraph("<b>Honest arc:</b> as-shipped flagship OOS Sortino 2.70 was look-ahead "
-                        "survivorship (full-period-ADV universe); point-in-time corrects to 1.97; "
-                        "param-frozen walk-forward = 2.03 (+vol-target 2.33). Per-fold OOS Sortino "
-                        "decays 3.49 (2023) → 1.97 (2024) → 1.11 (2025-26) — recent edge weakening.", s_small)]
+                        "survivorship; point-in-time + param-frozen walk-forward (top-50) corrected "
+                        "to <b>1.97–2.03</b>. The universe sweep then re-built every universe with "
+                        "<b>within-universe ranking</b> — the committed top-50 membership reproduces "
+                        "1.97 (reconciliation ✓), and widening to <b>top-100</b> lifts honest WF-OOS "
+                        "Sortino to <b>2.95</b> with a better drawdown (−35%). + vol-target → 3.04. "
+                        "adv ≥ $1M (~72 names) is the liquidity-floor alternative (WF 2.46).", s_small)]
     story += [Paragraph("Risks &amp; caveats", s_h1), bullets([
-        "<b>Recent edge decaying</b> — per-fold OOS Sortino 3.49 → 1.97 → 1.11; the 2.03 aggregate leans on 2023.",
-        "<b>Vol-target uplift is partly leverage</b> (CAGR 101%→146%, MaxDD −39%→−42%); risk-adjusted improves but not free.",
+        "<b>Cost realism at the margin</b> — 30 bps flat suits the top names; rank 50–100 / sub-$1M "
+        "assets can slip more. Drawdown improves with widening, but a tiered-cost re-test gates sizing up.",
+        "<b>Recent edge decay (top-50)</b> — per-fold OOS Sortino ran 3.49 → 1.97 → 1.11; the top-100 "
+        "aggregate (2.95) has not been decomposed per fold yet.",
+        "<b>Vol-target uplift is partly leverage</b>; risk-adjusted genuinely improves but it isn't free.",
         "<b>Registry signal_fn ≠ validated strategy</b>: signals.cross_sectional.medallion_lite is a "
         "simplified daily proxy; these metrics are the flagship hourly pipeline. Reconcile before live.",
-        "<b>Unverified</b>: membership-table ADV ranking assumed point-in-time; no fill/slippage beyond "
-        "flat 30 bps; small (9-config) walk-forward grid."])]
+        "<b>Universe reconstructed, not committed</b> — top-100 is recomputed from 20d trailing ADV "
+        "(no $10M floor); production should build it from a committed point-in-time membership table."])]
     story += [Paragraph("Provenance &amp; reproduce", s_h1), bullets([
         "Flagship pipeline: scripts/research/medallion_lite/ (factors, regime_ensemble, portfolio)",
-        "Harnesses: scripts/research/k2_atlas/{run_medallion_pit, run_medallion_walkforward, medallion_pdf}.py",
+        "Harnesses: scripts/research/k2_atlas/{run_medallion_universe, run_medallion_walkforward, run_medallion_pit}.py",
+        "Universe study: docs/research/medallion_universe_sweep.md",
         "Registry validation block: registry/alphas/2026-06-medallion-lite.yaml",
-        "Data: coinbase_crypto_ohlcv_lake.duckdb (bars_1h / top-50 membership table)"]),
+        "Data: coinbase_crypto_ohlcv_lake.duckdb (bars_1h + bars_1d_usd_universe_clean)"]),
         Paragraph("Regenerate this document:", s_body),
         Paragraph("PYTHONPATH=scripts/research:src python scripts/research/k2_atlas/medallion_pdf.py", s_mono)]
     story += [PageBreak()]
 
     # ===================== TEARSHEET =====================
     story += [Paragraph("Performance Tearsheet — full statistics", s_h1),
-              Paragraph("Point-in-time (survivorship-free) universe · 30 bps costs · daily series.", s_small)]
+              Paragraph("Point-in-time top-100 universe (survivorship-free) · 30 bps costs · daily series. "
+                        "Frozen flagship params (0.65/0.15); WF-OOS validated Sortino 2.95.", s_small)]
     order = list(s_full.keys())  # metric row order
     head = ["Metric", "Medallion FULL", "Medallion OOS", "BTC FULL", "BTC OOS"]
     rows = [head] + [[k, s_full.get(k, "—"), s_oos.get(k, "—"), b_full.get(k, "—"), b_oos.get(k, "—")]
