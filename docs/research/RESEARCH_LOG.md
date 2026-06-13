@@ -12,6 +12,25 @@ Standing references:
 
 ---
 
+## 2026-06-13 · Pre-registered auditable validation → frozen headline 2.84
+**Question.** Establish one defensible, auditable performance figure (frozen-as-headline, WF as
+upper bound) and correct the param-selection optimism in the prior 2.95.
+**Method.** Pre-registered protocol committed *before* the run (`medallion_validation_protocol.md`,
+commit `2ed0402`); deterministic harness (`run_medallion_audit.py`) emitting a JSON provenance
+manifest (`audit_code_clean`, versions, data fingerprint, gates, all results) + daily-return CSV.
+5-factor, top-100 PIT, within-universe rank, 30 bps. Acceptance gates G1–G4.
+**Result — ALL GATES PASS.** Frozen-param **OOS Sortino 2.84** (Sharpe 2.15, Calmar 4.73, CAGR
+173%, MaxDD −37%) vs BTC **1.78**; walk-forward upper bound 2.95. Per-fold 4.72/2.72/1.67 (all
+positive). Cost-robust 3.50→2.84(30bps)→2.42(50bps). PSR vs 0 = 1.00.
+**Decision.** **2.84 is the headline** (no params fit on data); 2.95 is the WF upper bound. Card,
+registry (`oos_sortino` 2.95→2.84), test, and investor report revised. Process fix: a benchmark
+reindex bug (BTC read 0.07) was caught and fixed (`65dd0c7`) before publishing; manifest re-run on
+a clean commit. The factor zoo + ensembling remain rejected (PBO).
+**Detail:** [`medallion_validation_protocol.md`](medallion_validation_protocol.md) ·
+**Harness:** `run_medallion_audit.py` · **Manifest:** `artifacts/medallion_audit/`
+
+---
+
 ## 2026-06-13 · Multiple-testing validation (DSR + PBO) — bagging overturned
 **Question.** Does the vote-bagging lift survive selection-bias correction?
 **Method.** Ensemble DESIGN space (mean/vote × m × K = 18 trials, **frozen** params to isolate the

@@ -34,39 +34,42 @@ pre_registered_metrics:
   sharpe: {expected: 1.96, confidence: medium}
   mean_ic: {expected: 0.04, confidence: low}
 
-# Realized results from the K2-Atlas Sortino study (honest, OOS, costs in).
-# Universe widened to top-100 after the universe sweep (docs/research/medallion_universe_sweep.md).
+# Realized results from the PRE-REGISTERED auditable validation
+# (docs/research/medallion_validation_protocol.md; manifest in artifacts/medallion_audit/).
+# HEADLINE = frozen-param (no params fit on data); walk-forward reported as an upper bound.
 validation:
   method: >
-    Param-frozen walk-forward (select params on each fold's train window, freeze,
-    score on test; folds 2021-22->2023, ->2024, ->2025-26) on a POINT-IN-TIME
-    top-100-by-20d-trailing-ADV universe (survivorship-free), with WITHIN-universe
-    cross-sectional factor ranking. The committed top-50 membership table reproduces
-    the prior 1.97 baseline under the same method (reconciliation). 30bps one-way, daily Sortino.
-  data_range: "2021-01..2026-06; OOS = concatenated test folds 2023-2026"
-  universe: "coinbase USD pairs, point-in-time top-100 by 20d trailing ADV (adv>=$1M is the floor alternative)"
+    Pre-registered, deterministic, auditable run (run_medallion_audit.py). HEADLINE uses
+    FROZEN flagship params (entry 0.65 / exit 0.40 / trail 0.15) -- nothing fit on the data --
+    on a POINT-IN-TIME top-100-by-20d-trailing-ADV universe (survivorship-free), within-universe
+    cross-sectional ranking, 30bps one-way, OOS=2023+. Walk-forward (param-selected) is reported
+    as an UPPER BOUND (2.95). Acceptance gates G1-G4 all pass.
+  data_range: "2021-01..2026-06; OOS = 2023-01-01 onward (1248 days)"
+  universe: "coinbase USD pairs, point-in-time top-100 by 20d trailing ADV (within-universe rank)"
   costs_bps: 30.0
-  oos_sortino: 2.95
-  oos_sharpe: 2.19
-  oos_cagr: 1.81
-  oos_max_dd: -0.35
+  oos_sortino: 2.84          # frozen headline
+  oos_sharpe: 2.15
+  oos_cagr: 1.73
+  oos_max_dd: -0.37
   benchmark: "BTC buy&hold"
   benchmark_oos_sortino: 1.78
   caveats:
-    - "signal_fn here is a SIMPLIFIED daily proxy; the validated metrics come from the
-       FLAGSHIP hourly event-driven pipeline (scripts/research/medallion_lite/), not this signal_fn."
-    - "30bps flat may be optimistic for rank 50-100 / sub-$1M names; a tiered-cost re-test is the
-       gating follow-up before sizing up the widened universe."
-    - "A vol-targeting overlay (QF-07) lifts OOS Sortino to ~3.04 (frozen)/2.90 (WF), partly via leverage."
-    - "Top-100 aggregate (2.95) not yet decomposed per fold; top-50 showed decay 3.49->1.97->1.11."
-    - "Universe is RECONSTRUCTED from 20d trailing ADV (no $10M floor); production should build
-       top-100 from a committed point-in-time membership table (method reconciled at membership=1.97)."
-    - "Prior validated number was 2.03 (top-50); widening to top-100 raises it to 2.95 with better DD (-35%)."
+    - "HEADLINE is frozen-param (2.84); walk-forward (param-selected) UPPER BOUND is 2.95. The
+       earlier reported 2.95 carried a parameter-selection optimism removed here."
+    - "Per-fold OOS Sortino decays 4.72 (2023) -> 2.72 (2024) -> 1.67 (2025-26): all positive,
+       but the recent edge is softening."
+    - "Cost-robust: OOS Sortino 3.50/3.27/3.05/2.84/2.42 at 0/10/20/30/50 bps. 30bps flat may
+       still understate slippage on rank 50-100 names; tiered-cost re-test is the next gate."
+    - "PSR vs 0 = 1.00 (frozen OOS) -- the base signal's Sharpe is genuine. The 100-factor zoo and
+       ALL ensembling were rejected: design selection fails PBO (0.70-0.77). Use the 5-factor composite."
+    - "signal_fn here is a SIMPLIFIED daily proxy; validated metrics are from the flagship hourly
+       pipeline. Universe is RECONSTRUCTED from trailing ADV; production should use a committed
+       point-in-time membership table (method reconciled: membership replays the 1.97 top-50 baseline)."
   provenance:
-    - "scripts/research/k2_atlas/run_medallion_universe.py (universe sweep + reconciliation -> top-100)"
-    - "scripts/research/k2_atlas/run_medallion_walkforward.py (walk-forward + overlays, top-50 baseline)"
-    - "scripts/research/k2_atlas/run_medallion_pit.py (point-in-time / survivorship test)"
-    - "docs/research/medallion_universe_sweep.md (universe study writeup)"
+    - "docs/research/medallion_validation_protocol.md (pre-registered protocol, committed 2ed0402)"
+    - "scripts/research/k2_atlas/run_medallion_audit.py (deterministic auditable harness)"
+    - "artifacts/medallion_audit/medallion_audit_<commit>.json (+ _daily_returns.csv) -- provenance manifest"
+    - "scripts/research/k2_atlas/run_medallion_validation.py (DSR/PBO; rejected factor zoo + ensembling)"
     - "K2 TRADE ATLAS rules applied: QF-01, QF-07, QF-10, CV-17, QF-21, MR-09"
 
 stage: S3

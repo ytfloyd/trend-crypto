@@ -33,28 +33,33 @@ time-series convexity framing · `QF-21` data-snooping discipline (walk-forward)
 `MR-09` crypto regime · factor intent per `QF-16/QF-09`.
 
 ## Validated performance (HONEST)
-Survivorship-free (point-in-time universe), 30 bps costs, daily Sortino. Adopted universe =
-**top-100 by point-in-time trailing ADV** (param-frozen walk-forward, within-universe rank).
+From the **pre-registered, auditable** run (`docs/research/medallion_validation_protocol.md`;
+deterministic; manifest in `artifacts/medallion_audit/`). Survivorship-free point-in-time top-100,
+within-universe rank, 30 bps, OOS = 2023+. **Headline = frozen params (nothing fit on the data);
+walk-forward is a labeled upper bound.** All pre-registered gates (G1–G4) pass.
 
-| Measure | Medallion Lite (top-100) | BTC buy & hold |
+| Measure (OOS 2023–26) | Medallion Lite (top-100) | BTC buy & hold |
 |---|---|---|
-| **Walk-forward OOS Sortino (2023–26, param-frozen)** | **2.95** | 1.78 |
-| + vol-targeting overlay (QF-07) | **3.04** (frozen) / 2.90 (WF) | — |
-| Frozen-param OOS Sortino | 2.84 | 1.78 |
-| OOS Sharpe / CAGR / MaxDD | 2.19 / 181% / −35% | 1.15 / 54% / −50% |
+| **Sortino — frozen params (HEADLINE)** | **2.84** | 1.78 |
+| Sortino — walk-forward (upper bound) | 2.95 | — |
+| Sharpe / Calmar / CAGR / MaxDD | 2.15 / 4.73 / 173% / −37% | 1.15 / 1.09 / 54% / −50% |
+| Per-fold OOS Sortino (frozen) | 4.72 / 2.72 / 1.67 (’23/’24/’25-26) | — |
+| Cost sweep (0/10/20/30/50 bps) | 3.50 / 3.27 / 3.05 / 2.84 / 2.42 | — |
+| PSR vs 0 (frozen OOS) | 1.00 | — |
 
-**The honest arc** (how the universe choice and the rigor got us here):
-1. As-shipped flagship: OOS Sortino **2.70** — but the universe was top-50 by *full-period*
-   ADV = **look-ahead survivorship**.
-2. Point-in-time top-50 membership + param-frozen walk-forward corrects it to **1.97–2.03**
-   (the previous validated number).
-3. **Universe sweep** (capacity-constrained mandate → trade smaller names): re-built every
-   universe point-in-time with **within-universe cross-sectional ranking**. The committed
-   membership table reproduces the **1.97** baseline (reconciliation ✓); widening to
-   **top-100 (~93 names)** lifts honest WF-OOS Sortino to **2.95** with a *better* drawdown
-   (−35%). + vol-targeting → **3.04**. `adv ≥ $1M` (~72 names) is the liquidity-floor
-   alternative (WF 2.46, +vol-target 3.00, DD −32%). See
-   `docs/research/medallion_universe_sweep.md`.
+**The honest arc** (how rigor moved the number):
+1. As-shipped flagship: OOS Sortino **2.70** — universe was top-50 by *full-period* ADV =
+   **look-ahead survivorship**.
+2. Point-in-time top-50 + walk-forward corrects to **1.97–2.03**.
+3. **Universe sweep** (capacity mandate → smaller names, within-universe ranking; membership spec
+   replays the 1.97 baseline, reconciliation ✓): widening to **top-100** raised the
+   walk-forward number to 2.95.
+4. **Pre-registered audit** then separated the two selection layers: the defensible **frozen-param
+   headline is 2.84**; 2.95 is the walk-forward upper bound (it includes a parameter-selection
+   layer). The **100-factor TA-Lib zoo and all ensembling were tested and rejected** — design
+   selection fails PBO (0.70–0.77); the simple 5-factor composite is what we run. See
+   `medallion_validation_protocol.md`, `medallion_factor_count_experiment.md`,
+   `medallion_bagging_experiment.md`.
 
 ## Risks & caveats
 - **Cost realism at the margin (new, from widening):** 30 bps flat is reasonable for the top

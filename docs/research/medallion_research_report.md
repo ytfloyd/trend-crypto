@@ -12,19 +12,23 @@ liquid US-dollar crypto pairs. It ranks the tradable universe each bar on a five
 sizes an event-driven portfolio (enter / hold / exit with a trailing stop), and scales gross
 exposure with an ensemble measure of the market regime.
 
-On a survivorship-free, walk-forward, net-of-cost basis (30 bps one-way), the strategy delivers a
-**Sortino ratio of ~2.0 on a 50-name universe and ~3.0 on a 100-name universe**, versus **1.78 for
-buy-and-hold Bitcoin**, with materially smaller drawdowns (−35% vs −50%). The central finding of
-this report is that **the strategy's edge scales with universe breadth** — a structural advantage
-for an intentionally capacity-constrained manager able to trade smaller digital assets — up to an
-optimum of roughly 70–100 names, beyond which liquidity quality degrades returns.
+On a survivorship-free, net-of-cost basis (30 bps one-way) over the 100-name universe, the strategy
+delivers an out-of-sample (2023–2026) **Sortino ratio of 2.84 on frozen parameters** — the headline,
+with nothing fit on the data — versus **1.78 for buy-and-hold Bitcoin**, with a materially smaller
+drawdown (−37% vs −50%). A walk-forward variant that re-selects parameters reaches 2.95, reported
+only as an upper bound. The central finding is that **the strategy's edge scales with universe
+breadth** — a structural advantage for an intentionally capacity-constrained manager able to trade
+smaller digital assets — up to an optimum of roughly 70–100 names. Every figure is reproduced by a
+single, deterministic, pre-registered audit with a published provenance manifest.
 
 | Metric (OOS 2023–2026, net of 30 bps) | Medallion Lite (100-name) | BTC buy & hold |
 |---|---:|---:|
-| Sortino ratio | **2.95** | 1.78 |
-| Sharpe ratio | 2.19 | 1.15 |
-| Annualised return (CAGR) | 181% | 54% |
-| Maximum drawdown | −35% | −50% |
+| Sortino — frozen params (headline) | **2.84** | 1.78 |
+| Sortino — walk-forward (upper bound) | 2.95 | — |
+| Sharpe ratio | 2.15 | 1.15 |
+| Annualised return (CAGR) | 173% | 54% |
+| Maximum drawdown | −37% | −50% |
+| Per-fold OOS Sortino (2023 / 2024 / 2025–26) | 4.72 / 2.72 / 1.67 | — |
 
 ---
 
