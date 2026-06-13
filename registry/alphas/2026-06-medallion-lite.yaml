@@ -54,14 +54,15 @@ validation:
   benchmark: "BTC buy&hold"
   benchmark_oos_sortino: 1.78
   caveats:
-    - "COST-FRAGILE / NOT PRODUCTION-READY as specified (top-100). The 2.84 assumes a UNIFORM 30bps;
-       under realistic LIQUIDITY-TIERED costs OOS Sortino falls to 1.42 (below BTC 1.78), and a
-       square-root market-impact model gives soft capacity < $5M AUM (Sortino 0.99 at $5M). The edge
-       is concentrated in small, expensive names. See docs/research/medallion_validation_protocol.md
-       (Amendment A) + artifacts/medallion_audit/medallion_cost_sensitivity.json. Next step: find a
-       cost-robust liquid universe (top-25 / ADV>=$50M) before any sizing."
-    - "HEADLINE is frozen-param (2.84) at FLAT 30bps; walk-forward UPPER BOUND is 2.95. The earlier
-       reported 2.95 carried a parameter-selection optimism removed here."
+    - "OPEN GATING HURDLE (not a kill): realized round-trip execution cost on small-cap names, TBD by
+       separate execution research. Headline 2.84 assumes ~30bps ROUND TRIP (the engine charges tc_bps
+       as round-trip = ~15bps/side). Sensitivity: flat round-trip 0/10/20/30/50bps -> Sortino
+       3.50/3.27/3.05/2.84/2.42; clears 2.0 to ~70bps flat-equivalent. BUT the alpha concentrates in
+       small-caps, so if their round-trip cost runs high (liquidity-tiered test at 20/40/70/120bps ->
+       1.42; +impact -> <1.0 by $25M AUM) the edge erodes. PASS/FAIL is set by the execution-cost number
+       once known. See medallion_cost_sensitivity.json / medallion_cost_universe.json."
+    - "HEADLINE is frozen-param (2.84) at ~30bps ROUND TRIP; walk-forward UPPER BOUND is 2.95. The
+       earlier reported 2.95 carried a parameter-selection optimism removed here."
     - "Per-fold OOS Sortino decays 4.72 (2023) -> 2.72 (2024) -> 1.67 (2025-26): all positive,
        but the recent edge is softening."
     - "Cost-robust: OOS Sortino 3.50/3.27/3.05/2.84/2.42 at 0/10/20/30/50 bps. 30bps flat may
@@ -78,9 +79,11 @@ validation:
     - "scripts/research/k2_atlas/run_medallion_validation.py (DSR/PBO; rejected factor zoo + ensembling)"
     - "K2 TRADE ATLAS rules applied: QF-01, QF-07, QF-10, CV-17, QF-21, MR-09"
 
-# KILLED 2026-06-13: real cross-sectional signal (DSR p~1.0) but NOT economically viable
-# after realistic transaction costs. No universe (top-10..100, ADV>=$20M/$50M) clears OOS
-# Sortino 2.0 under liquidity-tiered costs; best case adv>=$50M = 1.72 (< BTC 1.78), capacity
-# never clears 2.0 at any AUM. See medallion_cost_universe.json + RESEARCH_LOG.md.
-stage: Killed
-status: killed
+# ON HOLD 2026-06-13: signal validated (DSR p~1.0, survivorship-free, walk-forward). ONE open
+# gating dependency: realized round-trip execution cost on small-cap names (TBD by separate
+# execution research). Headline 2.84 assumes ~30 bps ROUND TRIP; the strategy clears OOS Sortino
+# 2.0 while effective round-trip cost stays ~<=70 bps flat-equivalent, but its alpha is in
+# small-caps so the small-name cost tier is the binding input. This is a HURDLE to clear, not a
+# kill. See medallion_cost_sensitivity.json / medallion_cost_universe.json + RESEARCH_LOG.md.
+stage: S3
+status: queued

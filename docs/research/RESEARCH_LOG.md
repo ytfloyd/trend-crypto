@@ -12,7 +12,23 @@ Standing references:
 
 ---
 
-## 2026-06-13 · Cost-robust universe search — ❌ DOES NOT GRADUATE → strategy KILLED
+## 2026-06-13 · Correction — un-kill: cost is a HURDLE, not a verdict
+**What changed.** The two entries below stamped Medallion Lite "KILLED" on the basis of a tiered
+*cost assumption*. That was an over-rotation: the realized small-cap round-trip cost is **TBD by
+separate execution research**, so it's an **open gating hurdle**, not a determined failure.
+**Corrected status.** Stage **S3**, status **queued** — signal validated (DSR p≈1.0,
+survivorship-free, walk-forward, G1–G4 pass); deployment **blocked on one input**: small-cap
+round-trip execution cost. Also corrected a labeling error — the engine charges `tc_bps` as a
+**round-trip** cost (≈15 bps/side), so the 2.84 headline is a **~30 bps round-trip** assumption,
+not 30 one-way as previously written.
+**The hurdle, quantified.** Flat round-trip sweep: 30bps→2.84, 50→2.42, breakeven for Sortino 2.0
+≈ 70 bps flat-equivalent. The binding question is the small-cap tier: tiered-realistic (20/40/70/120
+RT) → 1.42. PASS/FAIL decided once execution research returns the cost number. The cost-sensitivity
+analysis below stands; only the lifecycle verdict is corrected.
+
+---
+
+## 2026-06-13 · Cost-robust universe search — cost-sensitivity map (was mislabeled "killed")
 **Question.** Does any liquid-leaning universe survive realistic tiered costs where top-100 failed?
 **Method.** Pre-registered Amendment B: top_10/25/50/100 + ADV floors ≥$50M/$20M, frozen 5-factor,
 S0 flat-30 (reference) vs S2 realistic-tiered + S2-impact capacity curve. GC-B: cost-robust if
