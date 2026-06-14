@@ -10,8 +10,8 @@ discipline). Routes to the **convexity pipeline** (gates on convexity, not Sharp
 | Phase | Deliverable(s) | Status |
 |---|---|---|
 | **0. Foundation** | Research design (#1), feature taxonomy (#2), **stop-aware R-multiple labeler (#3)** + unit tests, transparent baseline score (#6), this plan | ✅ **done** |
-| 1. Data + labels | Wire labeler to the lake; build point-in-time panel; generate R-multiple labels across the universe; sanity-check the trade-outcome distribution | ⬜ next |
-| 2. Baseline empirics | Run `spot_convexity_score` → rank → trades; full distribution metrics (#4) with costs/slippage/gap; sweep stop/trail/horizon sensitivity | ⬜ |
+| **1. Data + labels** | Labeler wired to the lake; point-in-time top-100 panel; unconditional R-multiple base rate (166k trades) — see `03_phase1_label_distribution.md` | ✅ **done** |
+| 2. Baseline empirics | Run `spot_convexity_score` → rank → trades; full distribution metrics (#4) with costs/slippage/gap; sweep stop/trail/horizon sensitivity | ⬜ next |
 | 3. Hypothesis tests | Brief §5 H1–H10 (compression, trend, accel, stop viability, whipsaw, gap, right-tail, volume, pullback, stop-aware-vs-fwd-return target) | ⬜ |
 | 4. Models | Regression (R), classification (>+1/+2/+3R), risk (stop-before-+1R), ranking (#A–D) — must beat baseline OOS | ⬜ |
 | 5. Validation | Walk-forward OOS by time + regime; deflated/PBO on any selected config; full execution realism (#5,#7) | ⬜ |

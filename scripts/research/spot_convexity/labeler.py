@@ -112,9 +112,11 @@ def label_trade(
         out["risk_per_unit"] = risk
         return out
 
-    r_multiple = (exit_price - entry) / risk
-    mfe_R = (hwm - entry) / risk
-    mae_R = (lwm - entry) / risk
+    # round to 6 dp: kills floating-point cancellation noise (e.g. an at-stop exit computing
+    # to -1.0000000001) so downstream threshold comparisons like "< -1R" are exact.
+    r_multiple = round((exit_price - entry) / risk, 6)
+    mfe_R = round((hwm - entry) / risk, 6)
+    mae_R = round((lwm - entry) / risk, 6)
     bars_held = exit_idx - entry_idx
     return {
         "incomplete": False, "valid": True,
